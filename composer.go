@@ -86,6 +86,11 @@ func (r *ComposerJsonRepositories) HasRepository(url string) bool {
 	return false
 }
 
+// ComposerJson represents the contents of a composer.json file.
+//
+// Any top-level keys that are not modeled by an explicit field are preserved
+// in AdditionalFields and written back unchanged, so that keys added by future
+// Composer versions survive a read/modify/write round-trip.
 type ComposerJson struct {
 	path               string                   `json:"-"`
 	Name               string                   `json:"name"`
@@ -117,6 +122,112 @@ type ComposerJson struct {
 	Extra              map[string]any           `json:"extra,omitempty"`
 	Suggest            map[string]string        `json:"suggest,omitempty"`
 	NonFeatureBranches []string                 `json:"non-feature-branches,omitempty"`
+
+	// AdditionalFields holds any top-level composer.json keys not covered by the
+	// fields above. It is populated on read and merged back in on write,
+	// preserving unknown or future Composer settings verbatim. Note this is
+	// distinct from the modeled "extra" section, which is exposed via Extra.
+	AdditionalFields map[string]json.RawMessage `json:"-"`
+}
+
+// composerJsonAlias mirrors ComposerJson without the custom (un)marshal methods,
+// so the encoding/json default behavior can be reused without recursion.
+type composerJsonAlias ComposerJson
+
+// knownComposerJsonKeys lists the composer.json keys mapped to explicit fields.
+// Keys not in this set are routed to ComposerJson.AdditionalFields on unmarshal.
+var knownComposerJsonKeys = map[string]struct{}{
+	"name":                 {},
+	"abandoned":            {},
+	"bin":                  {},
+	"description":          {},
+	"version":              {},
+	"type":                 {},
+	"keywords":             {},
+	"homepage":             {},
+	"readme":               {},
+	"time":                 {},
+	"license":              {},
+	"minimum-stability":    {},
+	"prefer-stable":        {},
+	"authors":              {},
+	"support":              {},
+	"funding":              {},
+	"require":              {},
+	"require-dev":          {},
+	"conflict":             {},
+	"replace":              {},
+	"provide":              {},
+	"autoload":             {},
+	"autoload-dev":         {},
+	"repositories":         {},
+	"config":               {},
+	"scripts":              {},
+	"extra":                {},
+	"suggest":              {},
+	"non-feature-branches": {},
+}
+
+// UnmarshalJSON decodes the known composer.json fields and captures every
+// remaining top-level key in AdditionalFields so it can be re-emitted unchanged
+// on marshal.
+func (c *ComposerJson) UnmarshalJSON(data []byte) error {
+	var alias composerJsonAlias
+	if err := json.Unmarshal(data, &alias); err != nil {
+		return err
+	}
+	// Preserve fields set before unmarshalling (e.g. path) that are not part of
+	// the JSON payload.
+	path := c.path
+	*c = ComposerJson(alias)
+	c.path = path
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	for key := range raw {
+		if _, known := knownComposerJsonKeys[key]; known {
+			delete(raw, key)
+		}
+	}
+
+	if len(raw) > 0 {
+		c.AdditionalFields = raw
+	} else {
+		c.AdditionalFields = nil
+	}
+
+	return nil
+}
+
+// MarshalJSON serializes the known composer.json fields and merges any unknown
+// keys held in AdditionalFields back into the output object.
+func (c ComposerJson) MarshalJSON() ([]byte, error) {
+	encoded, err := json.Marshal(composerJsonAlias(c))
+	if err != nil {
+		return nil, err
+	}
+
+	if len(c.AdditionalFields) == 0 {
+		return encoded, nil
+	}
+
+	var merged map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &merged); err != nil {
+		return nil, err
+	}
+
+	for key, value := range c.AdditionalFields {
+		// Known fields always win over a stale AdditionalFields entry.
+		if _, known := knownComposerJsonKeys[key]; known {
+			continue
+		}
+		merged[key] = value
+	}
+
+	return json.Marshal(merged)
 }
 
 // HasPackage reports whether the given package is listed in "require".

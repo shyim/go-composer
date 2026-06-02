@@ -248,3 +248,86 @@ func TestReadComposerJsonDifferentRepositoryWritings(t *testing.T) {
 		assert.ElementsMatch(t, expectedRepos, composer.Repositories)
 	})
 }
+
+func TestComposerJsonPreservesUnknownFields(t *testing.T) {
+	t.Run("unknown top-level keys round-trip", func(t *testing.T) {
+		input := `{
+			"name": "vendor/pkg",
+			"require": {"php": "^8.2"},
+			"future-key": {"nested": "value"},
+			"some-flag": true
+		}`
+
+		var composer ComposerJson
+		err := json.Unmarshal([]byte(input), &composer)
+		assert.NoError(t, err)
+
+		// Known fields decode normally.
+		assert.Equal(t, "vendor/pkg", composer.Name)
+		assert.Equal(t, "^8.2", composer.Require["php"])
+
+		// Unknown keys are captured.
+		assert.Contains(t, composer.AdditionalFields, "future-key")
+		assert.Contains(t, composer.AdditionalFields, "some-flag")
+		assert.NotContains(t, composer.AdditionalFields, "name")
+		assert.NotContains(t, composer.AdditionalFields, "require")
+
+		// Marshalling re-emits the unknown keys unchanged alongside the known
+		// fields. (Byte-for-byte equality is not asserted: the base struct
+		// always emits empty autoload/autoload-dev objects.)
+		out, err := json.Marshal(composer)
+		assert.NoError(t, err)
+
+		var got map[string]json.RawMessage
+		assert.NoError(t, json.Unmarshal(out, &got))
+		assert.JSONEq(t, `{"nested": "value"}`, string(got["future-key"]))
+		assert.JSONEq(t, `true`, string(got["some-flag"]))
+		assert.JSONEq(t, `"vendor/pkg"`, string(got["name"]))
+		assert.JSONEq(t, `{"php": "^8.2"}`, string(got["require"]))
+	})
+
+	t.Run("modeled extra section is not treated as unknown", func(t *testing.T) {
+		input := `{"name": "vendor/pkg", "extra": {"branch-alias": {"dev-main": "1.x-dev"}}}`
+
+		var composer ComposerJson
+		err := json.Unmarshal([]byte(input), &composer)
+		assert.NoError(t, err)
+
+		// "extra" maps to the modeled Extra field, not AdditionalFields.
+		assert.Nil(t, composer.AdditionalFields)
+		assert.Contains(t, composer.Extra, "branch-alias")
+	})
+
+	t.Run("no unknown keys leaves AdditionalFields nil", func(t *testing.T) {
+		var composer ComposerJson
+		err := json.Unmarshal([]byte(`{"name": "vendor/pkg"}`), &composer)
+		assert.NoError(t, err)
+		assert.Nil(t, composer.AdditionalFields)
+	})
+
+	t.Run("unknown keys survive read/save to disk", func(t *testing.T) {
+		tempDir := t.TempDir()
+		composerFile := filepath.Join(tempDir, "composer.json")
+
+		input := `{"name":"vendor/pkg","future-key":{"nested":"value"}}`
+		err := os.WriteFile(composerFile, []byte(input), 0o644)
+		assert.NoError(t, err)
+
+		composer, err := ReadComposerJson(composerFile)
+		assert.NoError(t, err)
+		assert.Contains(t, composer.AdditionalFields, "future-key")
+
+		err = composer.Save()
+		assert.NoError(t, err)
+
+		written, err := os.ReadFile(composerFile)
+		assert.NoError(t, err)
+
+		var roundTripped ComposerJson
+		err = json.Unmarshal(written, &roundTripped)
+		assert.NoError(t, err)
+		assert.Equal(t, "vendor/pkg", roundTripped.Name)
+		assert.Contains(t, roundTripped.AdditionalFields, "future-key")
+		assert.JSONEq(t, `{"nested":"value"}`, string(roundTripped.AdditionalFields["future-key"]))
+	})
+}
