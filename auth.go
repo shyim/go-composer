@@ -274,8 +274,19 @@ func fillAuthStruct(auth *Auth) *Auth {
 	return auth
 }
 
-// ReadAuth reads a Composer auth.json file from the given path. If the
-// file does not exist, an empty auth configuration is returned.
+// ReadAuth reads a Composer auth.json file from the given path. If the file
+// does not exist, an empty (but usable) auth configuration is returned rather
+// than an error.
+//
+// Like Composer itself, ReadAuth also merges credentials from the COMPOSER_AUTH
+// environment variable — a JSON document in auth.json format — on top of the
+// file. For the per-host methods (http-basic, bearer, gitlab-token,
+// gitlab-oauth, github-oauth, bitbucket-oauth, custom-headers) an environment
+// entry overrides the file entry for the same host; a non-empty gitlab-domains
+// or github-domains list in the environment replaces the file's list entirely.
+// An unset or malformed COMPOSER_AUTH is ignored. This merge happens whether or
+// not the file exists, so credentials can be supplied entirely via the
+// environment.
 func ReadAuth(authFile string) (*Auth, error) {
 	content, err := os.ReadFile(authFile)
 	if err != nil {
