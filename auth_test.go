@@ -347,3 +347,74 @@ func TestGithubDomainsUnmarshalling(t *testing.T) {
 		assert.JSONEq(t, `{"github-domains": ["github.com", "example.com"]}`, string(jsonData))
 	})
 }
+
+func TestComposerAuthPreservesUnknownFields(t *testing.T) {
+	t.Run("unknown top-level keys round-trip", func(t *testing.T) {
+		input := `{
+			"bearer": {"example.com": "token"},
+			"future-auth": {"example.com": {"client-id": "abc", "client-secret": "xyz"}},
+			"some-flag": true
+		}`
+
+		var auth ComposerAuth
+		err := json.Unmarshal([]byte(input), &auth)
+		assert.NoError(t, err)
+
+		// Known field is decoded normally.
+		assert.Equal(t, "token", auth.BearerAuth["example.com"])
+
+		// Unknown keys are captured in Extra.
+		assert.Contains(t, auth.Extra, "future-auth")
+		assert.Contains(t, auth.Extra, "some-flag")
+		assert.NotContains(t, auth.Extra, "bearer")
+
+		// Marshalling re-emits the unknown keys unchanged.
+		out, err := json.Marshal(auth)
+		assert.NoError(t, err)
+		assert.JSONEq(t, input, string(out))
+	})
+
+	t.Run("no unknown keys leaves Extra nil", func(t *testing.T) {
+		var auth ComposerAuth
+		err := json.Unmarshal([]byte(`{"bearer": {"example.com": "token"}}`), &auth)
+		assert.NoError(t, err)
+		assert.Nil(t, auth.Extra)
+
+		out, err := json.Marshal(auth)
+		assert.NoError(t, err)
+		assert.JSONEq(t, `{"bearer": {"example.com": "token"}}`, string(out))
+	})
+
+	t.Run("unknown keys survive read/write to disk", func(t *testing.T) {
+		tempDir := t.TempDir()
+		authFile := filepath.Join(tempDir, "auth.json")
+
+		input := `{"bearer":{"example.com":"token"},"future-auth":{"example.com":"secret"}}`
+		err := os.WriteFile(authFile, []byte(input), 0o600)
+		assert.NoError(t, err)
+
+		auth, err := ReadComposerAuth(authFile)
+		assert.NoError(t, err)
+		assert.Contains(t, auth.Extra, "future-auth")
+
+		err = auth.Save()
+		assert.NoError(t, err)
+
+		written, err := os.ReadFile(authFile)
+		assert.NoError(t, err)
+
+		var roundTripped ComposerAuth
+		err = json.Unmarshal(written, &roundTripped)
+		assert.NoError(t, err)
+		assert.Equal(t, "token", roundTripped.BearerAuth["example.com"])
+		assert.Contains(t, roundTripped.Extra, "future-auth")
+		assert.JSONEq(t, `{"example.com":"secret"}`, string(roundTripped.Extra["future-auth"]))
+	})
+
+	t.Run("COMPOSER_AUTH unknown keys merge into Extra", func(t *testing.T) {
+		t.Setenv("COMPOSER_AUTH", `{"future-auth":{"example.com":"env-secret"}}`)
+		auth := fillAuthStruct(&ComposerAuth{})
+		assert.Contains(t, auth.Extra, "future-auth")
+		assert.JSONEq(t, `{"example.com":"env-secret"}`, string(auth.Extra["future-auth"]))
+	})
+}

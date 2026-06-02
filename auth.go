@@ -98,6 +98,10 @@ func (t GitlabOAuthToken) MarshalJSON() ([]byte, error) {
 }
 
 // ComposerAuth represents the contents of a Composer auth.json file.
+//
+// Any top-level keys that are not modeled by an explicit field are preserved
+// in Extra and written back unchanged, so that authentication methods added by
+// future Composer versions survive a read/modify/write round-trip.
 type ComposerAuth struct {
 	path           string                           `json:"-"`
 	HTTPBasicAuth  map[string]ComposerAuthHttpBasic `json:"http-basic,omitempty"`
@@ -109,6 +113,86 @@ type ComposerAuth struct {
 	CustomHeaders  map[string][]string              `json:"custom-headers,omitempty"`
 	GitlabDomains  []string                         `json:"gitlab-domains,omitempty"`
 	GithubDomains  []string                         `json:"github-domains,omitempty"`
+
+	// Extra holds any top-level auth.json keys not covered by the fields above.
+	// It is populated on read and merged back in on write, preserving unknown
+	// or future Composer authentication settings verbatim.
+	Extra map[string]json.RawMessage `json:"-"`
+}
+
+// composerAuthAlias mirrors ComposerAuth without the custom (un)marshal methods,
+// so the encoding/json default behavior can be reused without recursion.
+type composerAuthAlias ComposerAuth
+
+// knownComposerAuthKeys lists the auth.json keys mapped to explicit fields. Keys
+// not in this set are routed to ComposerAuth.Extra on unmarshal.
+var knownComposerAuthKeys = map[string]struct{}{
+	"http-basic":      {},
+	"bearer":          {},
+	"gitlab-token":    {},
+	"gitlab-oauth":    {},
+	"github-oauth":    {},
+	"bitbucket-oauth": {},
+	"custom-headers":  {},
+	"gitlab-domains":  {},
+	"github-domains":  {},
+}
+
+// UnmarshalJSON decodes the known auth.json fields and captures every remaining
+// top-level key in Extra so it can be re-emitted unchanged on marshal.
+func (a *ComposerAuth) UnmarshalJSON(data []byte) error {
+	var alias composerAuthAlias
+	if err := json.Unmarshal(data, &alias); err != nil {
+		return err
+	}
+	*a = ComposerAuth(alias)
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	for key := range raw {
+		if _, known := knownComposerAuthKeys[key]; known {
+			delete(raw, key)
+		}
+	}
+
+	if len(raw) > 0 {
+		a.Extra = raw
+	} else {
+		a.Extra = nil
+	}
+
+	return nil
+}
+
+// MarshalJSON serializes the known auth.json fields and merges any unknown keys
+// held in Extra back into the output object.
+func (a ComposerAuth) MarshalJSON() ([]byte, error) {
+	encoded, err := json.Marshal(composerAuthAlias(a))
+	if err != nil {
+		return nil, err
+	}
+
+	if len(a.Extra) == 0 {
+		return encoded, nil
+	}
+
+	var merged map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &merged); err != nil {
+		return nil, err
+	}
+
+	for key, value := range a.Extra {
+		// Known fields always win over a stale Extra entry of the same name.
+		if _, known := knownComposerAuthKeys[key]; known {
+			continue
+		}
+		merged[key] = value
+	}
+
+	return json.Marshal(merged)
 }
 
 // Save writes the auth configuration back to the file it was read from.
@@ -178,6 +262,12 @@ func fillAuthStruct(auth *ComposerAuth) *ComposerAuth {
 		}
 		if len(envAuth.GithubDomains) > 0 {
 			auth.GithubDomains = envAuth.GithubDomains
+		}
+		if len(envAuth.Extra) > 0 {
+			if auth.Extra == nil {
+				auth.Extra = map[string]json.RawMessage{}
+			}
+			maps.Copy(auth.Extra, envAuth.Extra)
 		}
 	}
 
