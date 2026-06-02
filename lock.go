@@ -47,22 +47,6 @@ func (c *ComposerLock) GetPackage(name string) *ComposerLockPackage {
 	return nil
 }
 
-// PHPConstraint returns the require.php constraint declared by the first of the
-// given package names that is present in the lock file and declares a php
-// requirement. Returns nil when none match or none declare a php requirement.
-func (c *ComposerLock) PHPConstraint(packageNames ...string) *PHPConstraint {
-	for _, name := range packageNames {
-		pkg := c.GetPackage(name)
-		if pkg == nil {
-			continue
-		}
-		if php, ok := pkg.Require["php"]; ok && php != "" {
-			return NewPHPConstraint(php)
-		}
-	}
-	return nil
-}
-
 func ReadComposerLock(pathToFile string) (*ComposerLock, error) {
 	content, err := os.ReadFile(pathToFile)
 	if err != nil {

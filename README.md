@@ -2,16 +2,15 @@
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/shyim/go-packagist.svg)](https://pkg.go.dev/github.com/shyim/go-packagist)
 
-A small, dependency-light Go library for reading and manipulating [Composer](https://getcomposer.org/) files and parsing PHP-style version constraints.
+A small, zero-dependency Go library for reading and manipulating [Composer](https://getcomposer.org/) files.
 
 ## Features
 
 - Read, modify and write `composer.json` while preserving the formatting Composer expects.
 - Read `composer.lock` to inspect locked packages.
 - Read and write `auth.json` for registry credentials.
-- Parse and evaluate PHP-style version constraints (e.g. `^1.2`, `>=2.0 <3.0`).
 
-The library only depends on the Go standard library and [`github.com/shyim/go-version`](https://github.com/shyim/go-version).
+The library only depends on the Go standard library.
 
 ## Installation
 
@@ -39,7 +38,7 @@ func main() {
 	}
 
 	// Inspect or modify the parsed document, then write it back.
-	if err := composer.Save("composer.json"); err != nil {
+	if err := composer.Save(); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -67,18 +66,6 @@ if err != nil {
 }
 
 _ = auth
-```
-
-### Parse PHP version constraints
-
-```go
-constraint, err := packagist.NewPHPConstraint("^1.2")
-if err != nil {
-	log.Fatal(err)
-}
-
-ok := constraint.Matches("1.4.0")
-log.Printf("matches: %v", ok)
 ```
 
 ## Documentation
