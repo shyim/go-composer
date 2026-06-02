@@ -9,6 +9,7 @@ A small, zero-dependency Go library for reading and manipulating [Composer](http
 - Read, modify and write `composer.json` while preserving the formatting Composer expects.
 - Read `composer.lock` to inspect locked packages.
 - Read and write `auth.json` for registry credentials.
+- Query `composer`-type repositories (packagist.org or private Satis/Packagist) over the V2 metadata protocol: fetch a package's versions, requirements, dist/source, search, and security advisories.
 
 The library only depends on the Go standard library.
 
@@ -97,6 +98,51 @@ if err != nil {
 }
 
 _ = auth
+```
+
+### Query a repository
+
+```go
+ctx := context.Background()
+
+// A single repository.
+repo := packagist.NewComposerRepository("https://repo.packagist.org", nil)
+
+meta, err := repo.GetPackage(ctx, "monolog/monolog")
+if err != nil {
+	log.Fatal(err)
+}
+for _, v := range meta.Versions {
+	log.Printf("%s requires %v", v.Version, v.Require)
+}
+
+// Pick an exact version (no constraint solving is performed).
+if v := meta.Version("3.10.0"); v != nil {
+	log.Println(v.Dist.URL)
+}
+```
+
+Drive several repositories from a `composer.json` (queried in order,
+first match wins; `packagist.org` is appended unless you opt out). Pass an
+`auth.json` to authenticate against private repositories — credentials are
+applied per request origin.
+
+```go
+composer, _ := packagist.ReadComposerJson("composer.json")
+auth, _ := packagist.ReadComposerAuth("auth.json")
+
+set := packagist.NewRepositorySetFromComposer(composer, auth, true)
+
+meta, source, err := set.GetPackage(ctx, "acme/private-package")
+if err != nil {
+	log.Fatal(err)
+}
+log.Printf("found %s in %s", meta.Name, source.URL())
+
+results, _ := set.Search(ctx, "logger")
+advisories, _ := set.Repositories[0].GetSecurityAdvisories(ctx, []string{"monolog/monolog"})
+_ = results
+_ = advisories
 ```
 
 ## Documentation
