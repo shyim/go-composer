@@ -1,0 +1,163 @@
+package repository
+
+import (
+	"bytes"
+	"encoding/json"
+)
+
+// minifiedComposer2 is the value of a Metadata document's "minified" key that
+// marks its version arrays as delta-encoded.
+const minifiedComposer2 = "composer/2.0"
+
+// metadataUnset is the sentinel value Composer's "composer/2.0" minified
+// metadata format uses to signal that a key present in a previous version
+// object must be removed from the current one.
+const metadataUnset = "__unset"
+
+// DecodePackageVersions decodes a packages[<name>] array into version objects,
+// expanding the "composer/2.0" delta encoding first when minified is true.
+func DecodePackageVersions(raw json.RawMessage, minified bool) ([]Version, error) {
+	var rawVersions []map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &rawVersions); err != nil {
+		return nil, err
+	}
+
+	if minified {
+		rawVersions = expandMetadata(rawVersions)
+	}
+
+	versions := make([]Version, 0, len(rawVersions))
+	for _, rv := range rawVersions {
+		obj, err := json.Marshal(rv)
+		if err != nil {
+			return nil, err
+		}
+		var v Version
+		if err := json.Unmarshal(obj, &v); err != nil {
+			return nil, err
+		}
+		versions = append(versions, v)
+	}
+	return versions, nil
+}
+
+// EncodePackageVersions marshals versions into the JSON array placed under
+// Metadata.Packages[name]. When minify is true the array is delta-encoded with
+// the "composer/2.0" format (set Metadata.Minified accordingly); the matching
+// decoder is DecodePackageVersions.
+func EncodePackageVersions(versions []Version, minify bool) (json.RawMessage, error) {
+	if versions == nil {
+		versions = []Version{}
+	}
+	if !minify {
+		return json.Marshal(versions)
+	}
+
+	raws := make([]map[string]json.RawMessage, len(versions))
+	for i, v := range versions {
+		b, err := json.Marshal(v)
+		if err != nil {
+			return nil, err
+		}
+		var m map[string]json.RawMessage
+		if err := json.Unmarshal(b, &m); err != nil {
+			return nil, err
+		}
+		raws[i] = m
+	}
+	return json.Marshal(minifyRaw(raws))
+}
+
+// expandMetadata reconstructs full version objects from the delta-compressed
+// representation used by the "minified": "composer/2.0" metadata format.
+//
+// The first entry is the baseline. Every subsequent entry carries only the
+// keys that changed relative to the accumulated previous version; a value of
+// "__unset" deletes that key. This mirrors composer/metadata-minifier's
+// expand().
+func expandMetadata(versions []map[string]json.RawMessage) []map[string]json.RawMessage {
+	expanded := make([]map[string]json.RawMessage, 0, len(versions))
+
+	// acc holds the running, fully-expanded version state.
+	var acc map[string]json.RawMessage
+
+	for _, delta := range versions {
+		if acc == nil {
+			acc = cloneRawMap(delta)
+			expanded = append(expanded, cloneRawMap(acc))
+			continue
+		}
+
+		for key, val := range delta {
+			if isUnsetSentinel(val) {
+				delete(acc, key)
+				continue
+			}
+			acc[key] = val
+		}
+
+		expanded = append(expanded, cloneRawMap(acc))
+	}
+
+	return expanded
+}
+
+// minifyRaw is the inverse of expandMetadata: it delta-encodes full version
+// objects so that each entry after the first carries only the keys that
+// changed relative to the previous one, with removed keys marked "__unset".
+// This mirrors composer/metadata-minifier's minify(). The first entry is
+// emitted verbatim as the baseline.
+func minifyRaw(versions []map[string]json.RawMessage) []map[string]json.RawMessage {
+	minified := make([]map[string]json.RawMessage, 0, len(versions))
+
+	// last holds the accumulated state a decoder would have after the previous
+	// emitted entry, so deltas are computed against it.
+	var last map[string]json.RawMessage
+
+	for _, v := range versions {
+		if last == nil {
+			last = cloneRawMap(v)
+			minified = append(minified, v)
+			continue
+		}
+
+		delta := map[string]json.RawMessage{}
+
+		// Changed or newly-added keys.
+		for key, val := range v {
+			if prev, ok := last[key]; !ok || !bytes.Equal(prev, val) {
+				delta[key] = val
+				last[key] = val
+			}
+		}
+
+		// Keys that disappeared since the previous version.
+		for key := range last {
+			if _, ok := v[key]; !ok {
+				delta[key] = json.RawMessage(`"` + metadataUnset + `"`)
+				delete(last, key)
+			}
+		}
+
+		minified = append(minified, delta)
+	}
+
+	return minified
+}
+
+// isUnsetSentinel reports whether a raw JSON value is the string "__unset".
+func isUnsetSentinel(raw json.RawMessage) bool {
+	var s string
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return false
+	}
+	return s == metadataUnset
+}
+
+func cloneRawMap(m map[string]json.RawMessage) map[string]json.RawMessage {
+	out := make(map[string]json.RawMessage, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
+}

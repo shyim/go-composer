@@ -1,0 +1,7 @@
+# Upstream composer/composer reference checkout — not part of this module
+/composer/
+
+# Go
+*.test
+*.out
+/dist/
