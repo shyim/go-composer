@@ -273,7 +273,7 @@ type ComposerJson struct {
 	Repositories       ComposerJsonRepositories `json:"repositories,omitempty"`
 	Config             map[string]any           `json:"config,omitempty"`
 	Scripts            map[string]any           `json:"scripts,omitempty"`
-	Extra              map[string]any           `json:"extra,omitempty"`
+	Extra              ExtraData                `json:"extra,omitempty"`
 	Suggest            map[string]string        `json:"suggest,omitempty"`
 	NonFeatureBranches []string                 `json:"non-feature-branches,omitempty"`
 
@@ -618,7 +618,7 @@ func ReadComposerJson(composerPath string) (*ComposerJson, error) {
 	}
 
 	if composerJson.Extra == nil {
-		composerJson.Extra = map[string]any{}
+		composerJson.Extra = ExtraData{}
 	}
 
 	return &composerJson, nil
