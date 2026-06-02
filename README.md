@@ -102,11 +102,14 @@ _ = auth
 
 ### Query a repository
 
+Repository querying lives in the `repository` subpackage
+(`github.com/shyim/go-packagist/repository`).
+
 ```go
 ctx := context.Background()
 
 // A single repository.
-repo := packagist.NewComposerRepository("https://repo.packagist.org", nil)
+repo := repository.New("https://repo.packagist.org", nil)
 
 meta, err := repo.GetPackage(ctx, "monolog/monolog")
 if err != nil {
@@ -131,7 +134,7 @@ applied per request origin.
 composer, _ := packagist.ReadComposerJson("composer.json")
 auth, _ := packagist.ReadComposerAuth("auth.json")
 
-set := packagist.NewRepositorySetFromComposer(composer, auth, true)
+set := repository.FromComposer(composer, auth, true)
 
 meta, source, err := set.GetPackage(ctx, "acme/private-package")
 if err != nil {

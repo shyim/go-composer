@@ -1,4 +1,4 @@
-package packagist
+package repository
 
 import (
 	"context"
@@ -9,14 +9,16 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	packagist "github.com/shyim/go-packagist"
 )
 
-// newTestRepo wires a ComposerRepository to an httptest server.
-func newTestRepo(t *testing.T, handler http.HandlerFunc, auth *ComposerAuth) (*ComposerRepository, *httptest.Server) {
+// newTestRepo wires a Client to an httptest server.
+func newTestRepo(t *testing.T, handler http.HandlerFunc, auth *packagist.ComposerAuth) (*Client, *httptest.Server) {
 	t.Helper()
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
-	repo := NewComposerRepository(srv.URL, auth)
+	repo := New(srv.URL, auth)
 	repo.HTTPClient = srv.Client()
 	return repo, srv
 }
@@ -181,7 +183,7 @@ func TestApplyAuthHeaders(t *testing.T) {
 	host := mustHost(t, srv.URL)
 
 	t.Run("http-basic", func(t *testing.T) {
-		repo.auth = &ComposerAuth{HTTPBasicAuth: map[string]ComposerAuthHttpBasic{host: {Username: "u", Password: "p"}}}
+		repo.auth = &packagist.ComposerAuth{HTTPBasicAuth: map[string]packagist.ComposerAuthHttpBasic{host: {Username: "u", Password: "p"}}}
 		repo.root = nil
 		_, err := repo.loadRoot(context.Background())
 		require.NoError(t, err)
@@ -189,7 +191,7 @@ func TestApplyAuthHeaders(t *testing.T) {
 	})
 
 	t.Run("bearer", func(t *testing.T) {
-		repo.auth = &ComposerAuth{BearerAuth: map[string]string{host: "tok"}}
+		repo.auth = &packagist.ComposerAuth{BearerAuth: map[string]string{host: "tok"}}
 		repo.root = nil
 		_, err := repo.loadRoot(context.Background())
 		require.NoError(t, err)
@@ -197,7 +199,7 @@ func TestApplyAuthHeaders(t *testing.T) {
 	})
 
 	t.Run("gitlab-token", func(t *testing.T) {
-		repo.auth = &ComposerAuth{GitlabAuth: map[string]GitlabToken{host: {Token: "glpat"}}}
+		repo.auth = &packagist.ComposerAuth{GitlabAuth: map[string]packagist.GitlabToken{host: {Token: "glpat"}}}
 		repo.root = nil
 		_, err := repo.loadRoot(context.Background())
 		require.NoError(t, err)
@@ -207,11 +209,11 @@ func TestApplyAuthHeaders(t *testing.T) {
 
 func TestPackagesJSONURL(t *testing.T) {
 	assert.Equal(t, "https://repo.packagist.org/packages.json",
-		NewComposerRepository("https://repo.packagist.org", nil).packagesJSONURL())
+		New("https://repo.packagist.org", nil).packagesJSONURL())
 	assert.Equal(t, "https://repo.packagist.org/packages.json",
-		NewComposerRepository("https://repo.packagist.org/", nil).packagesJSONURL())
+		New("https://repo.packagist.org/", nil).packagesJSONURL())
 	assert.Equal(t, "https://example.com/custom.json",
-		NewComposerRepository("https://example.com/custom.json", nil).packagesJSONURL())
+		New("https://example.com/custom.json", nil).packagesJSONURL())
 }
 
 func TestMatchPackagePattern(t *testing.T) {
@@ -231,7 +233,7 @@ func mustHost(t *testing.T, rawURL string) string {
 }
 
 func TestVersionLookup(t *testing.T) {
-	meta := &PackageMetadata{Versions: []PackageVersion{
+	meta := &Package{Versions: []Version{
 		{Version: "1.0.0", VersionNormalized: "1.0.0.0"},
 		{Version: "2.0.0", VersionNormalized: "2.0.0.0"},
 	}}

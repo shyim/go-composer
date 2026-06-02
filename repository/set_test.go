@@ -1,4 +1,4 @@
-package packagist
+package repository
 
 import (
 	"context"
@@ -7,9 +7,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	packagist "github.com/shyim/go-packagist"
 )
 
-func TestRepositorySetFirstMatchWins(t *testing.T) {
+func TestSetFirstMatchWins(t *testing.T) {
 	// First repo knows nothing; second repo provides the package.
 	private, _ := newTestRepo(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/packages.json" {
@@ -30,7 +32,7 @@ func TestRepositorySetFirstMatchWins(t *testing.T) {
 		}
 	}, nil)
 
-	set := NewRepositorySet(private, primary)
+	set := NewSet(private, primary)
 
 	meta, repo, err := set.GetPackage(context.Background(), "acme/lib")
 	require.NoError(t, err)
@@ -38,7 +40,7 @@ func TestRepositorySetFirstMatchWins(t *testing.T) {
 	assert.Same(t, primary, repo)
 }
 
-func TestRepositorySetNotFound(t *testing.T) {
+func TestSetNotFound(t *testing.T) {
 	repo, _ := newTestRepo(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/packages.json" {
 			_, _ = w.Write([]byte(`{"metadata-url":"/p2/%package%.json"}`))
@@ -47,51 +49,51 @@ func TestRepositorySetNotFound(t *testing.T) {
 		http.NotFound(w, r)
 	}, nil)
 
-	set := NewRepositorySet(repo)
+	set := NewSet(repo)
 	_, _, err := set.GetPackage(context.Background(), "no/thing")
 	assert.ErrorIs(t, err, ErrPackageNotFound)
 }
 
-func TestNewRepositorySetFromComposer(t *testing.T) {
-	c := &ComposerJson{
-		Repositories: ComposerJsonRepositories{
+func TestFromComposer(t *testing.T) {
+	c := &packagist.ComposerJson{
+		Repositories: packagist.ComposerJsonRepositories{
 			{Type: "composer", URL: "https://repo.example.com"},
 			{Type: "vcs", URL: "https://github.com/acme/lib"}, // skipped
 			{Type: "path", URL: "../local"},                   // skipped
 		},
 	}
 
-	set := NewRepositorySetFromComposer(c, nil, true)
+	set := FromComposer(c, nil, true)
 	require.Len(t, set.Repositories, 2)
 	assert.Equal(t, "https://repo.example.com", set.Repositories[0].URL())
 	assert.Equal(t, PackagistURL, set.Repositories[1].URL())
 }
 
-func TestNewRepositorySetFromComposerNoPackagist(t *testing.T) {
-	c := &ComposerJson{
-		Repositories: ComposerJsonRepositories{
+func TestFromComposerNoPackagist(t *testing.T) {
+	c := &packagist.ComposerJson{
+		Repositories: packagist.ComposerJsonRepositories{
 			{Type: "composer", URL: "https://repo.example.com"},
 		},
 	}
 
-	set := NewRepositorySetFromComposer(c, nil, false)
+	set := FromComposer(c, nil, false)
 	require.Len(t, set.Repositories, 1)
 	assert.Equal(t, "https://repo.example.com", set.Repositories[0].URL())
 }
 
-func TestNewRepositorySetFromComposerDeduplicatesPackagist(t *testing.T) {
-	c := &ComposerJson{
-		Repositories: ComposerJsonRepositories{
+func TestFromComposerDeduplicatesPackagist(t *testing.T) {
+	c := &packagist.ComposerJson{
+		Repositories: packagist.ComposerJsonRepositories{
 			{Type: "composer", URL: "https://repo.packagist.org"},
 		},
 	}
 
-	set := NewRepositorySetFromComposer(c, nil, true)
+	set := FromComposer(c, nil, true)
 	require.Len(t, set.Repositories, 1, "packagist should not be appended twice")
 }
 
-func TestRepositorySetSearchAggregates(t *testing.T) {
-	mk := func(name string) *ComposerRepository {
+func TestSetSearchAggregates(t *testing.T) {
+	mk := func(name string) *Client {
 		repo, _ := newTestRepo(t, func(w http.ResponseWriter, r *http.Request) {
 			switch r.URL.Path {
 			case "/packages.json":
@@ -105,7 +107,7 @@ func TestRepositorySetSearchAggregates(t *testing.T) {
 		return repo
 	}
 
-	set := NewRepositorySet(mk("a/one"), mk("b/two"))
+	set := NewSet(mk("a/one"), mk("b/two"))
 	results, err := set.Search(context.Background(), "x")
 	require.NoError(t, err)
 	require.Len(t, results, 2)

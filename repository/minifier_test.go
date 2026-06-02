@@ -1,4 +1,4 @@
-package packagist
+package repository
 
 import (
 	"encoding/json"
