@@ -213,86 +213,94 @@ func (a *Auth) Json(formatted bool) ([]byte, error) {
 	return json.MarshalIndent(a, "", "  ")
 }
 
-func fillAuthStruct(auth *Auth) *Auth {
-	if auth.BearerAuth == nil {
-		auth.BearerAuth = map[string]string{}
+// initMaps initializes any nil credential maps so callers can write to them
+// (e.g. auth.HTTPBasicAuth["host"] = ...) without a nil check.
+func (a *Auth) initMaps() {
+	if a.BearerAuth == nil {
+		a.BearerAuth = map[string]string{}
 	}
-
-	if auth.HTTPBasicAuth == nil {
-		auth.HTTPBasicAuth = map[string]BasicAuth{}
+	if a.HTTPBasicAuth == nil {
+		a.HTTPBasicAuth = map[string]BasicAuth{}
 	}
-
-	if auth.GitlabAuth == nil {
-		auth.GitlabAuth = map[string]GitlabToken{}
+	if a.GitlabAuth == nil {
+		a.GitlabAuth = map[string]GitlabToken{}
 	}
-
-	if auth.GitlabOAuth == nil {
-		auth.GitlabOAuth = map[string]GitlabOAuthToken{}
+	if a.GitlabOAuth == nil {
+		a.GitlabOAuth = map[string]GitlabOAuthToken{}
 	}
-
-	if auth.CustomHeaders == nil {
-		auth.CustomHeaders = map[string][]string{}
+	if a.CustomHeaders == nil {
+		a.CustomHeaders = map[string][]string{}
 	}
-
-	if auth.GithubOAuth == nil {
-		auth.GithubOAuth = map[string]string{}
+	if a.GithubOAuth == nil {
+		a.GithubOAuth = map[string]string{}
 	}
-
-	if auth.BitbucketOauth == nil {
-		auth.BitbucketOauth = map[string]map[string]string{}
+	if a.BitbucketOauth == nil {
+		a.BitbucketOauth = map[string]map[string]string{}
 	}
+}
 
+// MergeEnv merges credentials from the COMPOSER_AUTH environment variable — a
+// JSON document in auth.json format — on top of the current configuration, the
+// way Composer does. ReadAuth does not call this automatically; opt in with:
+//
+//	auth, err := composer.ReadAuth("auth.json")
+//	// ...
+//	if err := auth.MergeEnv(); err != nil { /* ... */ }
+//
+// For the per-host methods (http-basic, bearer, gitlab-token, gitlab-oauth,
+// github-oauth, bitbucket-oauth, custom-headers) an environment entry overrides
+// the entry for the same host; a non-empty gitlab-domains or github-domains
+// list in the environment replaces the current list entirely. MergeEnv is a
+// no-op when COMPOSER_AUTH is unset or empty, and returns an error when it is
+// set but not valid JSON.
+func (a *Auth) MergeEnv() error {
 	composerAuth := os.Getenv("COMPOSER_AUTH")
-
-	if composerAuth != "" {
-		var envAuth Auth
-		if err := json.Unmarshal([]byte(composerAuth), &envAuth); err != nil {
-			return auth
-		}
-
-		maps.Copy(auth.HTTPBasicAuth, envAuth.HTTPBasicAuth)
-		maps.Copy(auth.BearerAuth, envAuth.BearerAuth)
-		maps.Copy(auth.GitlabAuth, envAuth.GitlabAuth)
-		maps.Copy(auth.GitlabOAuth, envAuth.GitlabOAuth)
-		maps.Copy(auth.GithubOAuth, envAuth.GithubOAuth)
-		maps.Copy(auth.BitbucketOauth, envAuth.BitbucketOauth)
-		maps.Copy(auth.CustomHeaders, envAuth.CustomHeaders)
-		if len(envAuth.GitlabDomains) > 0 {
-			auth.GitlabDomains = envAuth.GitlabDomains
-		}
-		if len(envAuth.GithubDomains) > 0 {
-			auth.GithubDomains = envAuth.GithubDomains
-		}
-		if len(envAuth.Extra) > 0 {
-			if auth.Extra == nil {
-				auth.Extra = map[string]json.RawMessage{}
-			}
-			maps.Copy(auth.Extra, envAuth.Extra)
-		}
+	if composerAuth == "" {
+		return nil
 	}
 
-	return auth
+	var envAuth Auth
+	if err := json.Unmarshal([]byte(composerAuth), &envAuth); err != nil {
+		return fmt.Errorf("parsing COMPOSER_AUTH: %w", err)
+	}
+
+	a.initMaps()
+	maps.Copy(a.HTTPBasicAuth, envAuth.HTTPBasicAuth)
+	maps.Copy(a.BearerAuth, envAuth.BearerAuth)
+	maps.Copy(a.GitlabAuth, envAuth.GitlabAuth)
+	maps.Copy(a.GitlabOAuth, envAuth.GitlabOAuth)
+	maps.Copy(a.GithubOAuth, envAuth.GithubOAuth)
+	maps.Copy(a.BitbucketOauth, envAuth.BitbucketOauth)
+	maps.Copy(a.CustomHeaders, envAuth.CustomHeaders)
+	if len(envAuth.GitlabDomains) > 0 {
+		a.GitlabDomains = envAuth.GitlabDomains
+	}
+	if len(envAuth.GithubDomains) > 0 {
+		a.GithubDomains = envAuth.GithubDomains
+	}
+	if len(envAuth.Extra) > 0 {
+		if a.Extra == nil {
+			a.Extra = map[string]json.RawMessage{}
+		}
+		maps.Copy(a.Extra, envAuth.Extra)
+	}
+
+	return nil
 }
 
 // ReadAuth reads a Composer auth.json file from the given path. If the file
 // does not exist, an empty (but usable) auth configuration is returned rather
 // than an error.
 //
-// Like Composer itself, ReadAuth also merges credentials from the COMPOSER_AUTH
-// environment variable — a JSON document in auth.json format — on top of the
-// file. For the per-host methods (http-basic, bearer, gitlab-token,
-// gitlab-oauth, github-oauth, bitbucket-oauth, custom-headers) an environment
-// entry overrides the file entry for the same host; a non-empty gitlab-domains
-// or github-domains list in the environment replaces the file's list entirely.
-// An unset or malformed COMPOSER_AUTH is ignored. This merge happens whether or
-// not the file exists, so credentials can be supplied entirely via the
-// environment.
+// ReadAuth reads only the file. To also layer in credentials from the
+// COMPOSER_AUTH environment variable (as the Composer CLI does), call MergeEnv
+// on the result.
 func ReadAuth(authFile string) (*Auth, error) {
 	content, err := os.ReadFile(authFile)
 	if err != nil {
 		if os.IsNotExist(err) {
-			auth := fillAuthStruct(&Auth{})
-			auth.path = authFile
+			auth := &Auth{path: authFile}
+			auth.initMaps()
 			return auth, nil
 		}
 		return nil, err
@@ -304,6 +312,7 @@ func ReadAuth(authFile string) (*Auth, error) {
 	}
 
 	auth.path = authFile
+	auth.initMaps()
 
-	return fillAuthStruct(&auth), nil
+	return &auth, nil
 }

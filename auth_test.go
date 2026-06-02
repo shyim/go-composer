@@ -9,37 +9,32 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestFillAuthStruct(t *testing.T) {
-	// Test with empty struct
+func TestInitMaps(t *testing.T) {
+	// Empty struct gets its maps initialized.
 	auth := &Auth{}
-	filledAuth := fillAuthStruct(auth)
+	auth.initMaps()
 
-	assert.NotNil(t, filledAuth.HTTPBasicAuth)
-	assert.NotNil(t, filledAuth.BearerAuth)
-	assert.NotNil(t, filledAuth.GitlabAuth)
-	assert.NotNil(t, filledAuth.GithubOAuth)
-	assert.NotNil(t, filledAuth.BitbucketOauth)
+	assert.NotNil(t, auth.HTTPBasicAuth)
+	assert.NotNil(t, auth.BearerAuth)
+	assert.NotNil(t, auth.GitlabAuth)
+	assert.NotNil(t, auth.GithubOAuth)
+	assert.NotNil(t, auth.BitbucketOauth)
 
-	// Test with partially filled struct
+	// Existing entries are preserved.
 	auth = &Auth{
 		HTTPBasicAuth: map[string]BasicAuth{
-			"example.org": {
-				Username: "user",
-				Password: "pass",
-			},
+			"example.org": {Username: "user", Password: "pass"},
 		},
 	}
-	filledAuth = fillAuthStruct(auth)
+	auth.initMaps()
 
-	assert.NotNil(t, filledAuth.HTTPBasicAuth)
-	assert.Equal(t, "user", filledAuth.HTTPBasicAuth["example.org"].Username)
-	assert.Equal(t, "pass", filledAuth.HTTPBasicAuth["example.org"].Password)
-	assert.NotNil(t, filledAuth.BearerAuth)
-	assert.NotNil(t, filledAuth.GitlabAuth)
-	assert.NotNil(t, filledAuth.GithubOAuth)
-	assert.NotNil(t, filledAuth.BitbucketOauth)
+	assert.Equal(t, "user", auth.HTTPBasicAuth["example.org"].Username)
+	assert.Equal(t, "pass", auth.HTTPBasicAuth["example.org"].Password)
+	assert.NotNil(t, auth.BearerAuth)
+}
 
-	t.Run("with COMPOSER_AUTH", func(t *testing.T) {
+func TestMergeEnv(t *testing.T) {
+	t.Run("merges COMPOSER_AUTH", func(t *testing.T) {
 		composerAuth := `{
 			"http-basic": {
 				"example.com": {
@@ -52,22 +47,58 @@ func TestFillAuthStruct(t *testing.T) {
 			}
 		}`
 		t.Setenv("COMPOSER_AUTH", composerAuth)
-		auth := &Auth{}
-		filledAuth := fillAuthStruct(auth)
 
-		assert.Equal(t, "user", filledAuth.HTTPBasicAuth["example.com"].Username)
-		assert.Equal(t, "password", filledAuth.HTTPBasicAuth["example.com"].Password)
-		assert.Equal(t, "bearer-token", filledAuth.BearerAuth["example.com"])
+		auth := &Auth{}
+		assert.NoError(t, auth.MergeEnv())
+
+		assert.Equal(t, "user", auth.HTTPBasicAuth["example.com"].Username)
+		assert.Equal(t, "password", auth.HTTPBasicAuth["example.com"].Password)
+		assert.Equal(t, "bearer-token", auth.BearerAuth["example.com"])
 	})
 
-	t.Run("with invalid COMPOSER_AUTH", func(t *testing.T) {
+	t.Run("env overrides file entry for the same host", func(t *testing.T) {
+		t.Setenv("COMPOSER_AUTH", `{"bearer":{"example.com":"from-env"}}`)
+
+		auth := &Auth{BearerAuth: map[string]string{"example.com": "from-file", "other.com": "keep"}}
+		assert.NoError(t, auth.MergeEnv())
+
+		assert.Equal(t, "from-env", auth.BearerAuth["example.com"])
+		assert.Equal(t, "keep", auth.BearerAuth["other.com"])
+	})
+
+	t.Run("invalid COMPOSER_AUTH returns an error", func(t *testing.T) {
 		t.Setenv("COMPOSER_AUTH", "invalid-json")
-		auth := &Auth{}
-		filledAuth := fillAuthStruct(auth)
 
-		assert.Empty(t, filledAuth.HTTPBasicAuth)
-		assert.Empty(t, filledAuth.BearerAuth)
+		auth := &Auth{}
+		assert.Error(t, auth.MergeEnv())
 	})
+
+	t.Run("unset COMPOSER_AUTH is a no-op", func(t *testing.T) {
+		t.Setenv("COMPOSER_AUTH", "")
+
+		auth := &Auth{}
+		assert.NoError(t, auth.MergeEnv())
+		assert.Empty(t, auth.HTTPBasicAuth)
+		assert.Empty(t, auth.BearerAuth)
+	})
+}
+
+func TestReadAuthDoesNotMergeEnv(t *testing.T) {
+	// ReadAuth must read only the file; the environment is opt-in via MergeEnv.
+	t.Setenv("COMPOSER_AUTH", `{"bearer":{"example.com":"from-env"}}`)
+
+	tempDir := t.TempDir()
+	authFile := filepath.Join(tempDir, "auth.json")
+	assert.NoError(t, os.WriteFile(authFile, []byte(`{"bearer":{"file.com":"from-file"}}`), 0o644))
+
+	auth, err := ReadAuth(authFile)
+	assert.NoError(t, err)
+	assert.Equal(t, "from-file", auth.BearerAuth["file.com"])
+	assert.NotContains(t, auth.BearerAuth, "example.com")
+
+	// Opting in pulls the environment credentials.
+	assert.NoError(t, auth.MergeEnv())
+	assert.Equal(t, "from-env", auth.BearerAuth["example.com"])
 }
 
 func TestComposerAuthSave(t *testing.T) {
@@ -413,7 +444,8 @@ func TestComposerAuthPreservesUnknownFields(t *testing.T) {
 
 	t.Run("COMPOSER_AUTH unknown keys merge into Extra", func(t *testing.T) {
 		t.Setenv("COMPOSER_AUTH", `{"future-auth":{"example.com":"env-secret"}}`)
-		auth := fillAuthStruct(&Auth{})
+		auth := &Auth{}
+		assert.NoError(t, auth.MergeEnv())
 		assert.Contains(t, auth.Extra, "future-auth")
 		assert.JSONEq(t, `{"example.com":"env-secret"}`, string(auth.Extra["future-auth"]))
 	})

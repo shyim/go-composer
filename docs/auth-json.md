@@ -4,9 +4,10 @@
 
 `composer.ReadAuth` parses an `auth.json` into a `*composer.Auth`. If the file
 does not exist, an empty (but usable) configuration is returned rather than an
-error. `ReadAuth` also merges the `COMPOSER_AUTH` environment variable on top of
-the file — see [Environment (`COMPOSER_AUTH`)](#environment-composer_auth) below.
-`Save` writes the file back with `0600` permissions.
+error. It reads only the file; to also layer in the `COMPOSER_AUTH` environment
+variable (as the Composer CLI does), call `MergeEnv` — see
+[Environment (`COMPOSER_AUTH`)](#environment-composer_auth) below. `Save` writes
+the file back with `0600` permissions.
 
 ```go
 package main
@@ -56,27 +57,38 @@ round-trip.
 
 ## Environment (`COMPOSER_AUTH`)
 
-Like Composer itself, `ReadAuth` also reads the `COMPOSER_AUTH` environment
-variable — a JSON document in `auth.json` format — and merges it **on top of**
-whatever the file contains. This happens whether or not `auth.json` exists, so
-credentials can be supplied entirely through the environment (handy in CI):
+The Composer CLI also reads credentials from the `COMPOSER_AUTH` environment
+variable — a JSON document in `auth.json` format. `ReadAuth` reads **only the
+file**; layering in the environment is **opt-in** via `MergeEnv`, so it never
+happens behind your back:
+
+```go
+auth, err := composer.ReadAuth("auth.json")
+if err != nil {
+	log.Fatal(err)
+}
+if err := auth.MergeEnv(); err != nil {
+	log.Fatal(err) // COMPOSER_AUTH was set but is not valid JSON
+}
+```
+
+`MergeEnv` merges the environment **on top of** the current configuration, and
+works on a fresh `&composer.Auth{}` too, so credentials can come entirely from
+the environment (handy in CI):
 
 ```sh
 export COMPOSER_AUTH='{"http-basic":{"repo.example.com":{"username":"token","password":"secret"}}}'
 ```
 
-Precedence when both the file and the environment provide a value:
+Precedence when both the current config and the environment provide a value:
 
 - Per-host methods (`http-basic`, `bearer`, `gitlab-token`, `gitlab-oauth`,
   `github-oauth`, `bitbucket-oauth`, `custom-headers`) — an environment entry
-  **overrides** the file entry for the **same host**; other hosts are untouched.
+  **overrides** the entry for the **same host**; other hosts are untouched.
 - `gitlab-domains` / `github-domains` — a non-empty list in the environment
-  **replaces** the file's list entirely.
-- An unset or malformed `COMPOSER_AUTH` is ignored.
-
-If you want the file's contents only, read it yourself (`os.ReadFile` +
-`json.Unmarshal` into a `composer.Auth`) instead of calling `ReadAuth`, which
-always applies the environment merge.
+  **replaces** the current list entirely.
+- `MergeEnv` is a no-op when `COMPOSER_AUTH` is unset or empty, and returns an
+  error when it is set but not valid JSON.
 
 ## Serializing without writing to disk
 
