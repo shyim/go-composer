@@ -28,12 +28,17 @@ The library only depends on the Go standard library.
 go get github.com/shyim/go-composer
 ```
 
-The CycloneDX SBOM helpers live in a separate submodule so consumers can
-pull them independently:
+The CycloneDX SBOM helpers live in a separate module so consumers can pull
+them independently:
 
 ```sh
-go get github.com/shyim/go-composer/sbom
+go get github.com/shyim/go-composer/sbom@sbom/vX.Y.Z
 ```
+
+This repository is a multi-module workspace (`go.work` lists `.` and
+`./sbom`). Local development and CI use the workspace so `sbom` always sees
+the checked-out parent module; published consumers resolve a versioned
+require against the root module instead.
 
 ## Quick start
 

@@ -8,8 +8,14 @@ and turns a parsed `composer.lock` into a [CycloneDX](https://cyclonedx.org/)
 `github.com/shyim/go-composer` (stdlib lock types); install with:
 
 ```sh
-go get github.com/shyim/go-composer/sbom
+go get github.com/shyim/go-composer/sbom@sbom/vX.Y.Z
 ```
+
+In this monorepo, a root `go.work` lists both modules so the local parent is
+used automatically while developing. Consumers do not need `go.work` — after
+the first root release they resolve a real versioned require (for example
+`github.com/shyim/go-composer v0.1.0`). Nested releases use directory-prefixed
+tags: `sbom/v0.1.0` for this module, `v0.1.0` for the root.
 
 ## Quick start
 
