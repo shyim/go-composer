@@ -71,9 +71,10 @@ func (c *Client) GetPackage(ctx context.Context, name string) (*Package, error) 
 
 	lower := strings.ToLower(name)
 
-	// Partial packages declared inline in the root file take priority over a
-	// lazy metadata-url lookup, matching Composer.
-	if raw, ok := r.Packages[lower]; ok {
+	// Packages declared inline in the root file take priority over a lazy
+	// metadata-url lookup, matching Composer. Repositories like
+	// packages.shopware.com ship their entire catalog this way.
+	if raw, ok := lookupInlinePackage(r.Packages, name); ok {
 		versions, err := DecodePackageVersions(raw, false)
 		if err != nil {
 			return nil, err
@@ -136,4 +137,80 @@ func (c *Client) fetchPackageFile(ctx context.Context, metadataURL, fileName, pa
 		return nil, false, fmt.Errorf("parsing %s: %w", reqURL, err)
 	}
 	return versions, true, nil
+}
+
+// lookupInlinePackage finds packages[name] with a case-insensitive key match.
+func lookupInlinePackage(packages map[string]json.RawMessage, name string) (json.RawMessage, bool) {
+	if packages == nil {
+		return nil, false
+	}
+	if raw, ok := packages[name]; ok {
+		return raw, true
+	}
+	lower := strings.ToLower(name)
+	if raw, ok := packages[lower]; ok {
+		return raw, true
+	}
+	for k, raw := range packages {
+		if strings.EqualFold(k, name) {
+			return raw, true
+		}
+	}
+	return nil, false
+}
+
+// GetPackages returns every package declared inline in the repository's root
+// packages.json "packages" map, keyed by package name. This covers Composer
+// repositories that ship their full catalog in the root file (Satis full-dump,
+// packages.shopware.com, …). Packages that are only reachable via metadata-url
+// are not included — use GetPackage for those.
+//
+// For repositories with no inline packages the result is an empty map (not an
+// error). Version values support both the array and the version-keyed map forms
+// (see DecodePackageVersions).
+func (c *Client) GetPackages(ctx context.Context) (map[string]*Package, error) {
+	r, err := c.loadRoot(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make(map[string]*Package, len(r.Packages))
+	for name, raw := range r.Packages {
+		versions, err := DecodePackageVersions(raw, false)
+		if err != nil {
+			return nil, fmt.Errorf("decoding packages[%q]: %w", name, err)
+		}
+		if len(versions) == 0 {
+			continue
+		}
+		// Prefer the package name embedded in version objects when present.
+		pkgName := name
+		if versions[0].Name != "" {
+			pkgName = versions[0].Name
+		}
+		out[pkgName] = &Package{Name: pkgName, Versions: versions}
+	}
+	return out, nil
+}
+
+// PackageNames returns the names of packages the repository advertises. Order
+// of preference: available-packages, then keys of the inline root packages
+// map. When neither is present the repository is treated as lazy (metadata-url
+// only) and the result is empty — individual packages must be asked for by name.
+func (c *Client) PackageNames(ctx context.Context) ([]string, error) {
+	r, err := c.loadRoot(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(r.AvailablePackages) > 0 {
+		return append([]string(nil), r.AvailablePackages...), nil
+	}
+	if len(r.Packages) == 0 {
+		return []string{}, nil
+	}
+	names := make([]string, 0, len(r.Packages))
+	for name := range r.Packages {
+		names = append(names, name)
+	}
+	return names, nil
 }

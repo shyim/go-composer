@@ -14,18 +14,62 @@ const minifiedComposer2 = "composer/2.0"
 // object must be removed from the current one.
 const metadataUnset = "__unset"
 
-// DecodePackageVersions decodes a packages[<name>] array into version objects,
-// expanding the "composer/2.0" delta encoding first when minified is true.
+// DecodePackageVersions decodes a packages[<name>] value into version objects.
+// It accepts both shapes Composer uses:
+//
+//   - Array form (V2 metadata / partial packages):
+//     [{"name":"…","version":"1.0.0"}, …]
+//   - Map form (legacy packages.json catalogs, Satis, packages.shopware.com):
+//     {"1.0.0":{"name":"…","version":"1.0.0"}, …}
+//
+// When minified is true the array form is expanded first ("composer/2.0"
+// delta encoding). Minification is not defined for the map form.
 func DecodePackageVersions(raw json.RawMessage, minified bool) ([]Version, error) {
-	var rawVersions []map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &rawVersions); err != nil {
-		return nil, err
+	raw = json.RawMessage(bytes.TrimSpace(raw))
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, nil
 	}
 
-	if minified {
-		rawVersions = expandMetadata(rawVersions)
+	// Prefer the array form used by V2 metadata.
+	if raw[0] == '[' {
+		var rawVersions []map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &rawVersions); err != nil {
+			return nil, err
+		}
+		if minified {
+			rawVersions = expandMetadata(rawVersions)
+		}
+		return decodeVersionMaps(rawVersions)
 	}
 
+	// Map form: version-string → package object (Composer V1 packages.json).
+	if raw[0] == '{' {
+		var byVersion map[string]map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &byVersion); err != nil {
+			return nil, err
+		}
+		rawVersions := make([]map[string]json.RawMessage, 0, len(byVersion))
+		for ver, obj := range byVersion {
+			if obj == nil {
+				obj = map[string]json.RawMessage{}
+			}
+			// Ensure a "version" field even if the repo keyed it only as the map key.
+			if _, ok := obj["version"]; !ok {
+				b, err := json.Marshal(ver)
+				if err != nil {
+					return nil, err
+				}
+				obj["version"] = b
+			}
+			rawVersions = append(rawVersions, obj)
+		}
+		return decodeVersionMaps(rawVersions)
+	}
+
+	return nil, json.Unmarshal(raw, &struct{}{}) // force a useful error for other JSON kinds
+}
+
+func decodeVersionMaps(rawVersions []map[string]json.RawMessage) ([]Version, error) {
 	versions := make([]Version, 0, len(rawVersions))
 	for _, rv := range rawVersions {
 		obj, err := json.Marshal(rv)

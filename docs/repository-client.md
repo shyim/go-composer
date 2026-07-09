@@ -34,6 +34,44 @@ for _, v := range pkg.Versions {
 mirrors that release's `composer.json` plus `version_normalized`, `dist` and
 `source`.
 
+### Inline package catalogs
+
+Some repositories (Satis full dumps, Shopware's `packages.shopware.com`, …)
+ship their **entire** catalog inside the root `packages.json` under
+`"packages"`, keyed by package name. Values may be either:
+
+- an **array** of version objects (Composer V2 partial-packages style), or
+- a **map** version → package object (Composer V1 packages.json style).
+
+Both forms are decoded transparently. When a package is present inline,
+`GetPackage` serves it from the root file and does not hit `metadata-url`.
+
+To list everything at once (Shopware-store-style "give me all packages I can
+buy"):
+
+```go
+// Bearer auth for packages.shopware.com (from auth.json or hand-built).
+auth := &composer.Auth{BearerAuth: map[string]string{
+    "packages.shopware.com": token,
+}}
+repo := repository.New("https://packages.shopware.com", auth)
+
+all, err := repo.GetPackages(ctx) // map[name]*Package for every inline entry
+if err != nil {
+    log.Fatal(err)
+}
+for name, pkg := range all {
+    log.Printf("%s has %d versions", name, len(pkg.Versions))
+}
+
+// Or just the names:
+names, _ := repo.PackageNames(ctx)
+```
+
+`PackageNames` prefers `available-packages` when advertised; otherwise it
+returns the keys of the inline `packages` map. Lazy repositories with only a
+`metadata-url` yield an empty list (ask by name via `GetPackage`).
+
 ### Picking a version
 
 ```go

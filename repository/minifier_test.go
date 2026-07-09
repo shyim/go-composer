@@ -107,3 +107,11 @@ func TestEncodePackageVersionsEmpty(t *testing.T) {
 	testassert.RequireNoError(t, err)
 	testassert.JSONEq(t, `[]`, string(raw))
 }
+
+func TestDecodePackageVersionsEmpty(t *testing.T) {
+	for _, raw := range []string{"", "null", "[]", "{}"} {
+		versions, err := DecodePackageVersions([]byte(raw), false)
+		testassert.RequireNoError(t, err, raw)
+		testassert.Empty(t, versions, raw)
+	}
+}
