@@ -17,7 +17,8 @@ repository, and generate SBOMs from lock files.
   security advisories.
 - Serve your own repository over the same protocol and wire types, in the style
   of `net/http`.
-- Generate a CycloneDX 1.7 JSON Software Bill of Materials from a Composer lock.
+- Generate a CycloneDX 1.7 JSON Software Bill of Materials from a Composer
+  lock (`github.com/shyim/go-composer/sbom` submodule).
 
 The library only depends on the Go standard library.
 
@@ -25,6 +26,13 @@ The library only depends on the Go standard library.
 
 ```sh
 go get github.com/shyim/go-composer
+```
+
+The CycloneDX SBOM helpers live in a separate submodule so consumers can
+pull them independently:
+
+```sh
+go get github.com/shyim/go-composer/sbom
 ```
 
 ## Quick start

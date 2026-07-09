@@ -2,10 +2,14 @@
 
 [← Back to README](../README.md)
 
-The `sbom` package (`github.com/shyim/go-composer/sbom`) turns a parsed
-`composer.lock` into a [CycloneDX](https://cyclonedx.org/) 1.7 JSON Software
-Bill of Materials. It is dependency-free and designed to be reusable from any
-Composer tooling (CI scanners, CLIs, audit pipelines).
+The `sbom` package is its own Go module (`github.com/shyim/go-composer/sbom`)
+and turns a parsed `composer.lock` into a [CycloneDX](https://cyclonedx.org/)
+1.7 JSON Software Bill of Materials. Its only dependency is
+`github.com/shyim/go-composer` (stdlib lock types); install with:
+
+```sh
+go get github.com/shyim/go-composer/sbom
+```
 
 ## Quick start
 
