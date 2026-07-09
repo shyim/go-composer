@@ -475,6 +475,31 @@ func TestComposerJsonManipulationVerbs(t *testing.T) {
 	c.RemovePackageDev("phpunit/phpunit")
 	assert.False(t, c.HasPackageDev("phpunit/phpunit"))
 
+	// EnsurePackage adds only when missing from both require and require-dev.
+	assert.True(t, c.EnsurePackage("symfony/http-foundation", "^6.0"))
+	assert.True(t, c.HasPackage("symfony/http-foundation"))
+	assert.Equal(t, "^6.0", c.Require["symfony/http-foundation"])
+	// Already in require: no-op, keeps existing constraint.
+	assert.False(t, c.EnsurePackage("symfony/http-foundation", "^7.0"))
+	assert.Equal(t, "^6.0", c.Require["symfony/http-foundation"])
+	// Present in require-dev: also a no-op for EnsurePackage.
+	c.AddPackageDev("friendsofphp/php-cs-fixer", "^3.0")
+	assert.False(t, c.EnsurePackage("friendsofphp/php-cs-fixer", "^4.0"))
+	assert.False(t, c.HasPackage("friendsofphp/php-cs-fixer"))
+	assert.Equal(t, "^3.0", c.RequireDev["friendsofphp/php-cs-fixer"])
+
+	// EnsurePackageDev adds only when missing from both require and require-dev.
+	assert.True(t, c.EnsurePackageDev("phpunit/phpunit", "^10.0"))
+	assert.True(t, c.HasPackageDev("phpunit/phpunit"))
+	assert.Equal(t, "^10.0", c.RequireDev["phpunit/phpunit"])
+	// Already in require-dev: no-op.
+	assert.False(t, c.EnsurePackageDev("phpunit/phpunit", "^11.0"))
+	assert.Equal(t, "^10.0", c.RequireDev["phpunit/phpunit"])
+	// Present in require: also a no-op for EnsurePackageDev.
+	assert.False(t, c.EnsurePackageDev("symfony/http-foundation", "^7.0"))
+	assert.False(t, c.HasPackageDev("symfony/http-foundation"))
+	assert.Equal(t, "^6.0", c.Require["symfony/http-foundation"])
+
 	repo := Repository{Type: "vcs", URL: "https://example.com/r.git"}
 	c.AddRepository(repo)
 	assert.True(t, c.Repositories.HasRepository("https://example.com/r.git"))
