@@ -28,16 +28,10 @@ jobs:
           go-version: ${{ matrix.go-version }}
           cache: false # zero third-party deps; nothing useful to cache yet
 
-      - name: Vet root module
-        run: go vet ./...
+      # go.work joins the root module and ./sbom. Nested modules are not
+      # matched by the root "...", so list both patterns explicitly.
+      - name: Vet
+        run: go vet ./... ./sbom/...
 
-      - name: Test root module
-        run: go test ./... -count=1 -race
-
-      - name: Vet sbom module
-        working-directory: sbom
-        run: go vet ./...
-
-      - name: Test sbom module
-        working-directory: sbom
-        run: go test ./... -count=1 -race
+      - name: Test
+        run: go test ./... ./sbom/... -count=1 -race
