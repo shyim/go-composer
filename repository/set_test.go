@@ -2,13 +2,10 @@ package repository
 
 import (
 	"context"
+	"github.com/shyim/go-composer"
+	"github.com/shyim/go-composer/internal/testassert"
 	"net/http"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
-	"github.com/shyim/go-composer"
 )
 
 func TestSetFirstMatchWins(t *testing.T) {
@@ -35,9 +32,9 @@ func TestSetFirstMatchWins(t *testing.T) {
 	set := NewSet(private, primary)
 
 	meta, repo, err := set.GetPackage(context.Background(), "acme/lib")
-	require.NoError(t, err)
-	assert.Equal(t, "acme/lib", meta.Name)
-	assert.Same(t, primary, repo)
+	testassert.RequireNoError(t, err)
+	testassert.Equal(t, "acme/lib", meta.Name)
+	testassert.Same(t, primary, repo)
 }
 
 func TestSetNotFound(t *testing.T) {
@@ -51,7 +48,7 @@ func TestSetNotFound(t *testing.T) {
 
 	set := NewSet(repo)
 	_, _, err := set.GetPackage(context.Background(), "no/thing")
-	assert.ErrorIs(t, err, ErrPackageNotFound)
+	testassert.ErrorIs(t, err, ErrPackageNotFound)
 }
 
 func TestFromComposer(t *testing.T) {
@@ -64,9 +61,9 @@ func TestFromComposer(t *testing.T) {
 	}
 
 	set := FromComposer(c, nil, true)
-	require.Len(t, set.Repositories, 2)
-	assert.Equal(t, "https://repo.example.com", set.Repositories[0].URL())
-	assert.Equal(t, PackagistURL, set.Repositories[1].URL())
+	testassert.RequireLen(t, set.Repositories, 2)
+	testassert.Equal(t, "https://repo.example.com", set.Repositories[0].URL())
+	testassert.Equal(t, PackagistURL, set.Repositories[1].URL())
 }
 
 func TestFromComposerNoPackagist(t *testing.T) {
@@ -77,8 +74,8 @@ func TestFromComposerNoPackagist(t *testing.T) {
 	}
 
 	set := FromComposer(c, nil, false)
-	require.Len(t, set.Repositories, 1)
-	assert.Equal(t, "https://repo.example.com", set.Repositories[0].URL())
+	testassert.RequireLen(t, set.Repositories, 1)
+	testassert.Equal(t, "https://repo.example.com", set.Repositories[0].URL())
 }
 
 func TestFromComposerDeduplicatesPackagist(t *testing.T) {
@@ -89,7 +86,7 @@ func TestFromComposerDeduplicatesPackagist(t *testing.T) {
 	}
 
 	set := FromComposer(c, nil, true)
-	require.Len(t, set.Repositories, 1, "packagist should not be appended twice")
+	testassert.RequireLen(t, set.Repositories, 1, "packagist should not be appended twice")
 }
 
 func TestSetSearchAggregates(t *testing.T) {
@@ -109,8 +106,8 @@ func TestSetSearchAggregates(t *testing.T) {
 
 	set := NewSet(mk("a/one"), mk("b/two"))
 	results, err := set.Search(context.Background(), "x")
-	require.NoError(t, err)
-	require.Len(t, results, 2)
-	assert.Equal(t, "a/one", results[0].Name)
-	assert.Equal(t, "b/two", results[1].Name)
+	testassert.RequireNoError(t, err)
+	testassert.RequireLen(t, results, 2)
+	testassert.Equal(t, "a/one", results[0].Name)
+	testassert.Equal(t, "b/two", results[1].Name)
 }

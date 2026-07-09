@@ -1,11 +1,10 @@
 package composer
 
 import (
+	"github.com/shyim/go-composer/internal/testassert"
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
 )
 
 func TestReadComposerLock(t *testing.T) {
@@ -23,21 +22,21 @@ func TestReadComposerLock(t *testing.T) {
 			]
 		}`
 		err := os.WriteFile(lockFile, []byte(content), 0o644)
-		assert.NoError(t, err)
+		testassert.NoError(t, err)
 
 		// Test reading the file
 		lock, err := ReadLock(lockFile)
-		assert.NoError(t, err)
-		assert.NotNil(t, lock)
-		assert.Len(t, lock.Packages, 1)
-		assert.Equal(t, "symfony/console", lock.Packages[0].Name)
-		assert.Equal(t, "v6.3.0", lock.Packages[0].Version)
+		testassert.NoError(t, err)
+		testassert.NotNil(t, lock)
+		testassert.Len(t, lock.Packages, 1)
+		testassert.Equal(t, "symfony/console", lock.Packages[0].Name)
+		testassert.Equal(t, "v6.3.0", lock.Packages[0].Version)
 	})
 
 	t.Run("non-existent file", func(t *testing.T) {
 		lock, err := ReadLock("non-existent-file.lock")
-		assert.Error(t, err)
-		assert.Nil(t, lock)
+		testassert.Error(t, err)
+		testassert.Nil(t, lock)
 	})
 
 	t.Run("invalid JSON", func(t *testing.T) {
@@ -45,10 +44,10 @@ func TestReadComposerLock(t *testing.T) {
 		dir := t.TempDir()
 		lockFile := filepath.Join(dir, "invalid.lock")
 		err := os.WriteFile(lockFile, []byte("invalid json"), 0o644)
-		assert.NoError(t, err)
+		testassert.NoError(t, err)
 
 		lock, err := ReadLock(lockFile)
-		assert.Error(t, err)
-		assert.Nil(t, lock)
+		testassert.Error(t, err)
+		testassert.Nil(t, lock)
 	})
 }
