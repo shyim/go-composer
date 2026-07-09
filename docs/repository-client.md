@@ -70,7 +70,10 @@ names, _ := repo.PackageNames(ctx)
 
 `PackageNames` prefers `available-packages` when advertised; otherwise it
 returns the keys of the inline `packages` map. Lazy repositories with only a
-`metadata-url` yield an empty list (ask by name via `GetPackage`).
+`metadata-url` (no `available-packages`, no inline `packages`) return
+`repository.ErrListingNotSupported` from both `PackageNames` and `GetPackages`
+— ask for packages by name via `GetPackage` instead. An explicit empty
+`"packages": {}` is still listable and yields an empty result without error.
 
 ### Picking a version
 

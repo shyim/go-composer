@@ -169,9 +169,25 @@ func TestGetPackagesInlineCatalog(t *testing.T) {
 	testassert.Contains(t, names, "store.shopware.com/b")
 }
 
-func TestGetPackagesEmptyWhenOnlyMetadataURL(t *testing.T) {
+func TestGetPackagesListingNotSupported(t *testing.T) {
 	repo, _ := newTestRepo(t, func(w http.ResponseWriter, r *http.Request) {
+		// Lazy V2 repo: metadata-url only, no catalog to enumerate.
 		_, _ = w.Write([]byte(`{"metadata-url":"/p2/%package%.json"}`))
+	}, nil)
+
+	all, err := repo.GetPackages(context.Background())
+	testassert.ErrorIs(t, err, ErrListingNotSupported)
+	testassert.Nil(t, all)
+
+	names, err := repo.PackageNames(context.Background())
+	testassert.ErrorIs(t, err, ErrListingNotSupported)
+	testassert.Nil(t, names)
+}
+
+func TestGetPackagesEmptyInlineCatalog(t *testing.T) {
+	repo, _ := newTestRepo(t, func(w http.ResponseWriter, r *http.Request) {
+		// Explicit empty catalog is still a listable repository.
+		_, _ = w.Write([]byte(`{"packages":{}}`))
 	}, nil)
 
 	all, err := repo.GetPackages(context.Background())

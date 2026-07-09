@@ -17,6 +17,13 @@ import (
 // ErrPackageNotFound is returned when a repository does not know a package.
 var ErrPackageNotFound = errors.New("package not found")
 
+// ErrListingNotSupported is returned by PackageNames and GetPackages when the
+// repository does not expose a finite package list. Composer marks those
+// repositories as lazy (metadata-url only, no available-packages and no inline
+// root packages map). Callers should fall back to asking for packages by name
+// via GetPackage, or use a repository that advertises its catalog.
+var ErrListingNotSupported = errors.New("repository does not support package listing")
+
 // Client is a client for a single Composer "type": "composer" repository (such
 // as packagist.org or a private Satis/Packagist instance) speaking the V2
 // metadata protocol.

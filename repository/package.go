@@ -165,13 +165,18 @@ func lookupInlinePackage(packages map[string]json.RawMessage, name string) (json
 // packages.shopware.com, …). Packages that are only reachable via metadata-url
 // are not included — use GetPackage for those.
 //
-// For repositories with no inline packages the result is an empty map (not an
-// error). Version values support both the array and the version-keyed map forms
+// An empty but present "packages": {} yields an empty map. When the root file
+// has no packages map (nil / omitted), GetPackages returns
+// ErrListingNotSupported — the repository does not expose a bulk catalog.
+// Version values support both the array and the version-keyed map forms
 // (see DecodePackageVersions).
 func (c *Client) GetPackages(ctx context.Context) (map[string]*Package, error) {
 	r, err := c.loadRoot(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if r.Packages == nil {
+		return nil, ErrListingNotSupported
 	}
 
 	out := make(map[string]*Package, len(r.Packages))
@@ -196,7 +201,8 @@ func (c *Client) GetPackages(ctx context.Context) (map[string]*Package, error) {
 // PackageNames returns the names of packages the repository advertises. Order
 // of preference: available-packages, then keys of the inline root packages
 // map. When neither is present the repository is treated as lazy (metadata-url
-// only) and the result is empty — individual packages must be asked for by name.
+// only) and PackageNames returns ErrListingNotSupported — individual packages
+// must be asked for by name via GetPackage.
 func (c *Client) PackageNames(ctx context.Context) ([]string, error) {
 	r, err := c.loadRoot(ctx)
 	if err != nil {
@@ -205,8 +211,8 @@ func (c *Client) PackageNames(ctx context.Context) ([]string, error) {
 	if len(r.AvailablePackages) > 0 {
 		return append([]string(nil), r.AvailablePackages...), nil
 	}
-	if len(r.Packages) == 0 {
-		return []string{}, nil
+	if r.Packages == nil {
+		return nil, ErrListingNotSupported
 	}
 	names := make([]string, 0, len(r.Packages))
 	for name := range r.Packages {
