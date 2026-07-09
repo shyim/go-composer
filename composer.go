@@ -538,6 +538,17 @@ func (c *Json) AddPackage(name, constraint string) {
 	c.Require[name] = constraint
 }
 
+// EnsurePackage adds name=constraint to "require" only when the package is not
+// already present in either "require" or "require-dev". Returns true when the
+// document was modified.
+func (c *Json) EnsurePackage(name, constraint string) bool {
+	if c.HasPackage(name) || c.HasPackageDev(name) {
+		return false
+	}
+	c.AddPackage(name, constraint)
+	return true
+}
+
 // RemovePackage removes a package from the "require" section.
 func (c *Json) RemovePackage(name string) {
 	delete(c.Require, name)
@@ -549,6 +560,17 @@ func (c *Json) AddPackageDev(name, constraint string) {
 		c.RequireDev = PackageLink{}
 	}
 	c.RequireDev[name] = constraint
+}
+
+// EnsurePackageDev adds name=constraint to "require-dev" only when the package
+// is not already present in either "require" or "require-dev". Returns true when
+// the document was modified.
+func (c *Json) EnsurePackageDev(name, constraint string) bool {
+	if c.HasPackage(name) || c.HasPackageDev(name) {
+		return false
+	}
+	c.AddPackageDev(name, constraint)
+	return true
 }
 
 // RemovePackageDev removes a package from the "require-dev" section.
