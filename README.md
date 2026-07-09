@@ -3,8 +3,8 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/shyim/go-composer.svg)](https://pkg.go.dev/github.com/shyim/go-composer)
 
 A small, zero-dependency Go library for the [Composer](https://getcomposer.org/)
-ecosystem: read and manipulate Composer files, and query or host a Composer
-repository.
+ecosystem: read and manipulate Composer files, query or host a Composer
+repository, and generate SBOMs from lock files.
 
 ## Features
 
@@ -17,6 +17,7 @@ repository.
   security advisories.
 - Serve your own repository over the same protocol and wire types, in the style
   of `net/http`.
+- Generate a CycloneDX 1.7 JSON Software Bill of Materials from a Composer lock.
 
 The library only depends on the Go standard library.
 
@@ -64,6 +65,8 @@ The library covers several use-cases; each has a focused guide:
   repository, multi-repository sets, search, security advisories and auth.
 - [Serving a repository](docs/repository-server.md) — the server: the `Provider`
   interface and the optional search/advisory capabilities.
+- [Generating a CycloneDX SBOM](docs/sbom.md) — turn a `composer.lock` into a
+  Software Bill of Materials.
 
 ## Documentation
 
