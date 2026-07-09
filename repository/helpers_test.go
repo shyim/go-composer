@@ -1,14 +1,12 @@
 package repository
 
 import (
+	"github.com/shyim/go-composer"
+	"github.com/shyim/go-composer/internal/testassert"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
-
-	"github.com/stretchr/testify/require"
-
-	"github.com/shyim/go-composer"
 )
 
 // newTestRepo wires a Client to an httptest server.
@@ -24,6 +22,6 @@ func newTestRepo(t *testing.T, handler http.HandlerFunc, auth *composer.Auth) (*
 func mustHost(t *testing.T, rawURL string) string {
 	t.Helper()
 	u, err := url.Parse(rawURL)
-	require.NoError(t, err)
+	testassert.RequireNoError(t, err)
 	return u.Host
 }

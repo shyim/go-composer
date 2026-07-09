@@ -2,13 +2,11 @@ package repository
 
 import (
 	"context"
+	"github.com/shyim/go-composer/internal/testassert"
 	"net/http"
 	"strconv"
 	"strings"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestGetSecurityAdvisoriesAPI(t *testing.T) {
@@ -17,9 +15,9 @@ func TestGetSecurityAdvisoriesAPI(t *testing.T) {
 		case "/packages.json":
 			_, _ = w.Write([]byte(`{"metadata-url":"/p2/%package%.json","security-advisories":{"api-url":"/advisories.json"}}`))
 		case "/advisories.json":
-			require.Equal(t, http.MethodPost, r.Method)
-			require.NoError(t, r.ParseForm())
-			assert.Contains(t, r.PostForm["packages[]"], "acme/lib")
+			testassert.RequireEqual(t, http.MethodPost, r.Method)
+			testassert.RequireNoError(t, r.ParseForm())
+			testassert.Contains(t, r.PostForm["packages[]"], "acme/lib")
 			_, _ = w.Write([]byte(`{"advisories":{"acme/lib":[
 				{"advisoryId":"PKSA-1","packageName":"acme/lib","affectedVersions":"<1.0.1","title":"XSS","cve":"CVE-1","severity":"medium","sources":[{"name":"GitHub","remoteId":"GHSA-1"}],"reportedAt":"2024-01-01 00:00:00"}
 			]}}`))
@@ -29,15 +27,15 @@ func TestGetSecurityAdvisoriesAPI(t *testing.T) {
 	}, nil)
 
 	adv, err := repo.GetSecurityAdvisories(context.Background(), []string{"acme/lib"})
-	require.NoError(t, err)
-	require.Len(t, adv.Package("acme/lib"), 1)
-	assert.Equal(t, "CVE-1", adv.Package("acme/lib")[0].CVE)
-	assert.Equal(t, "<1.0.1", adv.Package("acme/lib")[0].AffectedVersions)
-	assert.Equal(t, "acme/lib", adv.Package("acme/lib")[0].PackageName)
-	assert.Equal(t, "medium", adv.Package("acme/lib")[0].Severity)
-	require.Len(t, adv.Package("acme/lib")[0].Sources, 1)
-	assert.Equal(t, "GHSA-1", adv.Package("acme/lib")[0].Sources[0].RemoteID)
-	assert.Equal(t, 1, adv.Len())
+	testassert.RequireNoError(t, err)
+	testassert.RequireLen(t, adv.Package("acme/lib"), 1)
+	testassert.Equal(t, "CVE-1", adv.Package("acme/lib")[0].CVE)
+	testassert.Equal(t, "<1.0.1", adv.Package("acme/lib")[0].AffectedVersions)
+	testassert.Equal(t, "acme/lib", adv.Package("acme/lib")[0].PackageName)
+	testassert.Equal(t, "medium", adv.Package("acme/lib")[0].Severity)
+	testassert.RequireLen(t, adv.Package("acme/lib")[0].Sources, 1)
+	testassert.Equal(t, "GHSA-1", adv.Package("acme/lib")[0].Sources[0].RemoteID)
+	testassert.Equal(t, 1, adv.Len())
 }
 
 func TestGetSecurityAdvisoriesMetadataOnly(t *testing.T) {
@@ -58,11 +56,11 @@ func TestGetSecurityAdvisoriesMetadataOnly(t *testing.T) {
 	}, nil)
 
 	adv, err := repo.GetSecurityAdvisories(context.Background(), []string{"acme/lib"})
-	require.NoError(t, err)
-	require.Len(t, adv.Package("acme/lib"), 1)
-	assert.Equal(t, "PKSA-2", adv.Package("acme/lib")[0].AdvisoryID)
-	assert.Equal(t, "acme/lib", adv.Package("acme/lib")[0].PackageName)
-	assert.Equal(t, "<1.0.1", adv.Package("acme/lib")[0].AffectedVersions)
+	testassert.RequireNoError(t, err)
+	testassert.RequireLen(t, adv.Package("acme/lib"), 1)
+	testassert.Equal(t, "PKSA-2", adv.Package("acme/lib")[0].AdvisoryID)
+	testassert.Equal(t, "acme/lib", adv.Package("acme/lib")[0].PackageName)
+	testassert.Equal(t, "<1.0.1", adv.Package("acme/lib")[0].AffectedVersions)
 }
 
 func TestGetSecurityAdvisoriesNoneConfigured(t *testing.T) {
@@ -71,9 +69,9 @@ func TestGetSecurityAdvisoriesNoneConfigured(t *testing.T) {
 	}, nil)
 
 	adv, err := repo.GetSecurityAdvisories(context.Background(), []string{"acme/lib"})
-	require.NoError(t, err)
-	assert.Empty(t, adv)
-	assert.Equal(t, 0, adv.Len())
+	testassert.RequireNoError(t, err)
+	testassert.Empty(t, adv)
+	testassert.Equal(t, 0, adv.Len())
 }
 
 func TestGetSecurityAdvisoriesRespectsAvailablePackages(t *testing.T) {
@@ -92,9 +90,9 @@ func TestGetSecurityAdvisoriesRespectsAvailablePackages(t *testing.T) {
 	}, nil)
 
 	adv, err := repo.GetSecurityAdvisories(context.Background(), []string{"acme/lib"})
-	require.NoError(t, err)
-	assert.Empty(t, adv)
-	assert.Equal(t, 0, apiHits)
+	testassert.RequireNoError(t, err)
+	testassert.Empty(t, adv)
+	testassert.Equal(t, 0, apiHits)
 }
 
 func TestSetGetSecurityAdvisoriesMerges(t *testing.T) {
@@ -121,13 +119,13 @@ func TestSetGetSecurityAdvisoriesMerges(t *testing.T) {
 
 	set := NewSet(a, b)
 	adv, err := set.GetSecurityAdvisories(context.Background(), []string{"acme/lib", "acme/other"})
-	require.NoError(t, err)
-	require.Len(t, adv.Package("acme/lib"), 2)
-	assert.Equal(t, "A1", adv.Package("acme/lib")[0].AdvisoryID)
-	assert.Equal(t, "B1", adv.Package("acme/lib")[1].AdvisoryID)
-	require.Len(t, adv.Package("acme/other"), 1)
-	assert.Equal(t, "B2", adv.Package("acme/other")[0].AdvisoryID)
-	assert.Equal(t, 3, adv.Len())
+	testassert.RequireNoError(t, err)
+	testassert.RequireLen(t, adv.Package("acme/lib"), 2)
+	testassert.Equal(t, "A1", adv.Package("acme/lib")[0].AdvisoryID)
+	testassert.Equal(t, "B1", adv.Package("acme/lib")[1].AdvisoryID)
+	testassert.RequireLen(t, adv.Package("acme/other"), 1)
+	testassert.Equal(t, "B2", adv.Package("acme/other")[0].AdvisoryID)
+	testassert.Equal(t, 3, adv.Len())
 }
 
 // simpleCheck is a tiny numeric "x.y.z" checker good enough for unit tests.
@@ -215,34 +213,34 @@ func TestSecurityAdvisoryAffects(t *testing.T) {
 	}
 
 	t.Run("first branch matches", func(t *testing.T) {
-		assert.True(t, a.Affects("6.6.10.14", simpleCheck))
+		testassert.True(t, a.Affects("6.6.10.14", simpleCheck))
 	})
 	t.Run("second branch matches", func(t *testing.T) {
-		assert.True(t, a.Affects("6.7.5.0", simpleCheck))
+		testassert.True(t, a.Affects("6.7.5.0", simpleCheck))
 	})
 	t.Run("between branches does not match", func(t *testing.T) {
-		assert.False(t, a.Affects("6.6.10.15", simpleCheck))
+		testassert.False(t, a.Affects("6.6.10.15", simpleCheck))
 	})
 	t.Run("above all branches does not match", func(t *testing.T) {
-		assert.False(t, a.Affects("6.7.8.1", simpleCheck))
+		testassert.False(t, a.Affects("6.7.8.1", simpleCheck))
 	})
 	t.Run("version with v prefix", func(t *testing.T) {
-		assert.True(t, a.Affects("v6.6.10.14", simpleCheck))
+		testassert.True(t, a.Affects("v6.6.10.14", simpleCheck))
 	})
 	t.Run("double-pipe separator", func(t *testing.T) {
 		b := SecurityAdvisory{AffectedVersions: "<1.0.0||>=2.0.0,<2.1.0"}
-		assert.True(t, b.Affects("0.9.0", simpleCheck))
-		assert.True(t, b.Affects("2.0.5", simpleCheck))
-		assert.False(t, b.Affects("1.5.0", simpleCheck))
+		testassert.True(t, b.Affects("0.9.0", simpleCheck))
+		testassert.True(t, b.Affects("2.0.5", simpleCheck))
+		testassert.False(t, b.Affects("1.5.0", simpleCheck))
 	})
 	t.Run("nil check is not affected", func(t *testing.T) {
-		assert.False(t, a.Affects("6.6.10.14", nil))
+		testassert.False(t, a.Affects("6.6.10.14", nil))
 	})
 	t.Run("empty version is not affected", func(t *testing.T) {
-		assert.False(t, a.Affects("", simpleCheck))
+		testassert.False(t, a.Affects("", simpleCheck))
 	})
 	t.Run("empty affected versions not affected", func(t *testing.T) {
-		assert.False(t, SecurityAdvisory{}.Affects("1.0.0", simpleCheck))
+		testassert.False(t, SecurityAdvisory{}.Affects("1.0.0", simpleCheck))
 	})
 }
 
@@ -256,13 +254,13 @@ func TestAdvisoriesAffectingPackage(t *testing.T) {
 	}
 
 	matching := adv.AffectingPackage("acme/lib", "6.7.5.0", simpleCheck)
-	require.Len(t, matching, 1)
-	assert.Equal(t, "B", matching[0].Title)
+	testassert.RequireLen(t, matching, 1)
+	testassert.Equal(t, "B", matching[0].Title)
 
-	assert.Nil(t, adv.AffectingPackage("acme/lib", "6.7.5.0", nil))
-	assert.Nil(t, adv.AffectingPackage("missing/pkg", "1.0.0", simpleCheck))
+	testassert.Nil(t, adv.AffectingPackage("acme/lib", "6.7.5.0", nil))
+	testassert.Nil(t, adv.AffectingPackage("missing/pkg", "1.0.0", simpleCheck))
 	// case-insensitive package lookup
-	assert.Len(t, adv.AffectingPackage("Acme/Lib", "6.7.5.0", simpleCheck), 1)
+	testassert.Len(t, adv.AffectingPackage("Acme/Lib", "6.7.5.0", simpleCheck), 1)
 }
 
 func TestAdvisoriesAffecting(t *testing.T) {
@@ -281,15 +279,15 @@ func TestAdvisoriesAffecting(t *testing.T) {
 	}
 
 	out := adv.Affecting(versions, simpleCheck)
-	require.Len(t, out, 1)
-	require.Len(t, out.Package("acme/lib"), 1)
-	assert.Equal(t, "XSS", out.Package("acme/lib")[0].Title)
-	assert.Nil(t, out.Package("acme/other"))
+	testassert.RequireLen(t, out, 1)
+	testassert.RequireLen(t, out.Package("acme/lib"), 1)
+	testassert.Equal(t, "XSS", out.Package("acme/lib")[0].Title)
+	testassert.Nil(t, out.Package("acme/other"))
 
 	// Case-insensitive package name lookup for the installed map key.
 	out = adv.Affecting(map[string]string{"Acme/Lib": "1.0.0"}, simpleCheck)
-	require.Len(t, out.Package("Acme/Lib"), 1)
+	testassert.RequireLen(t, out.Package("Acme/Lib"), 1)
 
-	assert.Empty(t, adv.Affecting(versions, nil))
-	assert.Empty(t, Advisories{}.Affecting(versions, simpleCheck))
+	testassert.Empty(t, adv.Affecting(versions, nil))
+	testassert.Empty(t, Advisories{}.Affecting(versions, simpleCheck))
 }

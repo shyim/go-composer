@@ -2,11 +2,9 @@ package repository
 
 import (
 	"context"
+	"github.com/shyim/go-composer/internal/testassert"
 	"net/http"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestGetPackageV2Minified(t *testing.T) {
@@ -34,26 +32,26 @@ func TestGetPackageV2Minified(t *testing.T) {
 	}, nil)
 
 	meta, err := repo.GetPackage(context.Background(), "acme/lib")
-	require.NoError(t, err)
-	require.Equal(t, "acme/lib", meta.Name)
-	require.Len(t, meta.Versions, 3) // 2 stable + 1 dev
+	testassert.RequireNoError(t, err)
+	testassert.RequireEqual(t, "acme/lib", meta.Name)
+	testassert.RequireLen(t, meta.Versions, 3) // 2 stable + 1 dev
 
 	// Delta expansion: the second version inherits type from the first.
 	v1 := meta.Version("1.0.0")
-	require.NotNil(t, v1)
-	assert.Equal(t, "library", v1.Type)
-	assert.Equal(t, map[string]string{"php": ">=7.4"}, v1.Require)
+	testassert.RequireNotNil(t, v1)
+	testassert.Equal(t, "library", v1.Type)
+	testassert.Equal(t, map[string]string{"php": ">=7.4"}, v1.Require)
 
 	v2 := meta.Version("2.0.0")
-	require.NotNil(t, v2)
-	assert.Equal(t, "zip", v2.Dist.Type)
-	assert.Equal(t, "https://ex/2.0.0.zip", v2.Dist.URL)
+	testassert.RequireNotNil(t, v2)
+	testassert.Equal(t, "zip", v2.Dist.Type)
+	testassert.Equal(t, "https://ex/2.0.0.zip", v2.Dist.URL)
 
 	dev := meta.Version("dev-main")
-	require.NotNil(t, dev)
+	testassert.RequireNotNil(t, dev)
 
-	assert.Contains(t, gotPaths, "/p2/acme/lib.json")
-	assert.Contains(t, gotPaths, "/p2/acme/lib~dev.json")
+	testassert.Contains(t, gotPaths, "/p2/acme/lib.json")
+	testassert.Contains(t, gotPaths, "/p2/acme/lib~dev.json")
 }
 
 func TestGetPackageNotFound(t *testing.T) {
@@ -66,7 +64,7 @@ func TestGetPackageNotFound(t *testing.T) {
 	}, nil)
 
 	_, err := repo.GetPackage(context.Background(), "missing/pkg")
-	assert.ErrorIs(t, err, ErrPackageNotFound)
+	testassert.ErrorIs(t, err, ErrPackageNotFound)
 }
 
 func TestGetPackageRespectsAvailableList(t *testing.T) {
@@ -82,13 +80,13 @@ func TestGetPackageRespectsAvailableList(t *testing.T) {
 	}, nil)
 
 	_, err := repo.GetPackage(context.Background(), "acme/unknown")
-	assert.ErrorIs(t, err, ErrPackageNotFound)
-	assert.False(t, fetchedMetadata, "should not hit metadata-url for a package outside available-packages")
+	testassert.ErrorIs(t, err, ErrPackageNotFound)
+	testassert.False(t, fetchedMetadata, "should not hit metadata-url for a package outside available-packages")
 }
 
 func TestGetPackageInlinePartialPackages(t *testing.T) {
 	repo, _ := newTestRepo(t, func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "/packages.json", r.URL.Path)
+		testassert.RequireEqual(t, "/packages.json", r.URL.Path)
 		_, _ = w.Write([]byte(`{
 			"metadata-url":"/p2/%package%.json",
 			"packages":{"acme/inline":[{"name":"acme/inline","version":"1.2.3","version_normalized":"1.2.3.0"}]}
@@ -96,9 +94,9 @@ func TestGetPackageInlinePartialPackages(t *testing.T) {
 	}, nil)
 
 	meta, err := repo.GetPackage(context.Background(), "acme/inline")
-	require.NoError(t, err)
-	require.Len(t, meta.Versions, 1)
-	assert.Equal(t, "1.2.3", meta.Versions[0].Version)
+	testassert.RequireNoError(t, err)
+	testassert.RequireLen(t, meta.Versions, 1)
+	testassert.Equal(t, "1.2.3", meta.Versions[0].Version)
 }
 
 func TestVersionLookup(t *testing.T) {
@@ -106,7 +104,7 @@ func TestVersionLookup(t *testing.T) {
 		{Version: "1.0.0", VersionNormalized: "1.0.0.0"},
 		{Version: "2.0.0", VersionNormalized: "2.0.0.0"},
 	}}
-	assert.Equal(t, "1.0.0", meta.Version("1.0.0").Version)
-	assert.Equal(t, "2.0.0", meta.Version("2.0.0.0").Version) // by normalized
-	assert.Nil(t, meta.Version("9.9.9"))
+	testassert.Equal(t, "1.0.0", meta.Version("1.0.0").Version)
+	testassert.Equal(t, "2.0.0", meta.Version("2.0.0.0").Version) // by normalized
+	testassert.Nil(t, meta.Version("9.9.9"))
 }

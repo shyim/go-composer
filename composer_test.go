@@ -2,11 +2,11 @@ package composer
 
 import (
 	"encoding/json"
+	"fmt"
+	"github.com/shyim/go-composer/internal/testassert"
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
 )
 
 func TestComposerJsonRepositoriesHasRepository(t *testing.T) {
@@ -21,10 +21,10 @@ func TestComposerJsonRepositoriesHasRepository(t *testing.T) {
 		},
 	}
 
-	assert.True(t, repos.HasRepository("https://github.com/shopware/platform"))
-	assert.True(t, repos.HasRepository("https://packages.example.org"))
-	assert.False(t, repos.HasRepository("https://github.com/shopware/core"))
-	assert.False(t, repos.HasRepository(""))
+	testassert.True(t, repos.HasRepository("https://github.com/shopware/platform"))
+	testassert.True(t, repos.HasRepository("https://packages.example.org"))
+	testassert.False(t, repos.HasRepository("https://github.com/shopware/core"))
+	testassert.False(t, repos.HasRepository(""))
 }
 
 func TestComposerJsonHasPackage(t *testing.T) {
@@ -38,10 +38,10 @@ func TestComposerJsonHasPackage(t *testing.T) {
 		},
 	}
 
-	assert.True(t, composer.HasPackage("symfony/console"))
-	assert.True(t, composer.HasPackage("php"))
-	assert.False(t, composer.HasPackage("phpunit/phpunit"))
-	assert.False(t, composer.HasPackage("not-exists"))
+	testassert.True(t, composer.HasPackage("symfony/console"))
+	testassert.True(t, composer.HasPackage("php"))
+	testassert.False(t, composer.HasPackage("phpunit/phpunit"))
+	testassert.False(t, composer.HasPackage("not-exists"))
 }
 
 func TestComposerJsonHasPackageDev(t *testing.T) {
@@ -55,10 +55,10 @@ func TestComposerJsonHasPackageDev(t *testing.T) {
 		},
 	}
 
-	assert.True(t, composer.HasPackageDev("phpunit/phpunit"))
-	assert.True(t, composer.HasPackageDev("mockery/mockery"))
-	assert.False(t, composer.HasPackageDev("symfony/console"))
-	assert.False(t, composer.HasPackageDev("not-exists"))
+	testassert.True(t, composer.HasPackageDev("phpunit/phpunit"))
+	testassert.True(t, composer.HasPackageDev("mockery/mockery"))
+	testassert.False(t, composer.HasPackageDev("symfony/console"))
+	testassert.False(t, composer.HasPackageDev("not-exists"))
 }
 
 func TestComposerJsonSave(t *testing.T) {
@@ -94,32 +94,32 @@ func TestComposerJsonSave(t *testing.T) {
 	}
 
 	err := composer.Save()
-	assert.NoError(t, err)
+	testassert.NoError(t, err)
 
 	// Verify file exists
 	_, err = os.Stat(composerFile)
-	assert.NoError(t, err)
+	testassert.NoError(t, err)
 
 	// Read and verify content
 	content, err := os.ReadFile(composerFile)
-	assert.NoError(t, err)
+	testassert.NoError(t, err)
 
 	var savedComposer Json
 	err = json.Unmarshal(content, &savedComposer)
-	assert.NoError(t, err)
+	testassert.NoError(t, err)
 
-	assert.Equal(t, composer.Name, savedComposer.Name)
-	assert.Equal(t, composer.Description, savedComposer.Description)
-	assert.Equal(t, composer.Version, savedComposer.Version)
-	assert.Equal(t, composer.Type, savedComposer.Type)
-	assert.Equal(t, composer.License, savedComposer.License)
-	assert.Equal(t, composer.Authors[0].Name, savedComposer.Authors[0].Name)
-	assert.Equal(t, composer.Authors[0].Email, savedComposer.Authors[0].Email)
-	assert.Equal(t, composer.Require["php"], savedComposer.Require["php"])
-	assert.Equal(t, composer.Require["symfony/console"], savedComposer.Require["symfony/console"])
-	assert.Equal(t, composer.RequireDev["phpunit/phpunit"], savedComposer.RequireDev["phpunit/phpunit"])
-	assert.Equal(t, composer.Repositories[0].Type, savedComposer.Repositories[0].Type)
-	assert.Equal(t, composer.Repositories[0].URL, savedComposer.Repositories[0].URL)
+	testassert.Equal(t, composer.Name, savedComposer.Name)
+	testassert.Equal(t, composer.Description, savedComposer.Description)
+	testassert.Equal(t, composer.Version, savedComposer.Version)
+	testassert.Equal(t, composer.Type, savedComposer.Type)
+	testassert.Equal(t, composer.License, savedComposer.License)
+	testassert.Equal(t, composer.Authors[0].Name, savedComposer.Authors[0].Name)
+	testassert.Equal(t, composer.Authors[0].Email, savedComposer.Authors[0].Email)
+	testassert.Equal(t, composer.Require["php"], savedComposer.Require["php"])
+	testassert.Equal(t, composer.Require["symfony/console"], savedComposer.Require["symfony/console"])
+	testassert.Equal(t, composer.RequireDev["phpunit/phpunit"], savedComposer.RequireDev["phpunit/phpunit"])
+	testassert.Equal(t, composer.Repositories[0].Type, savedComposer.Repositories[0].Type)
+	testassert.Equal(t, composer.Repositories[0].URL, savedComposer.Repositories[0].URL)
 }
 
 func TestReadComposerJson(t *testing.T) {
@@ -144,19 +144,19 @@ func TestReadComposerJson(t *testing.T) {
 		}
 
 		content, err := json.MarshalIndent(testComposer, "", "  ")
-		assert.NoError(t, err)
+		testassert.NoError(t, err)
 		err = os.WriteFile(composerFile, content, 0o644)
-		assert.NoError(t, err)
+		testassert.NoError(t, err)
 
 		composer, err := ReadJson(composerFile)
-		assert.NoError(t, err)
-		assert.Equal(t, composerFile, composer.path)
-		assert.Equal(t, "shopware/cli", composer.Name)
-		assert.Equal(t, "Shopware CLI tool", composer.Description)
-		assert.Equal(t, "1.0.0", composer.Version)
-		assert.Equal(t, "^7.4 || ^8.0", composer.Require["php"])
-		assert.Equal(t, "vcs", composer.Repositories[0].Type)
-		assert.Equal(t, "https://github.com/shopware/platform", composer.Repositories[0].URL)
+		testassert.NoError(t, err)
+		testassert.Equal(t, composerFile, composer.path)
+		testassert.Equal(t, "shopware/cli", composer.Name)
+		testassert.Equal(t, "Shopware CLI tool", composer.Description)
+		testassert.Equal(t, "1.0.0", composer.Version)
+		testassert.Equal(t, "^7.4 || ^8.0", composer.Require["php"])
+		testassert.Equal(t, "vcs", composer.Repositories[0].Type)
+		testassert.Equal(t, "https://github.com/shopware/platform", composer.Repositories[0].URL)
 	})
 
 	// Test with non-existing file
@@ -165,8 +165,8 @@ func TestReadComposerJson(t *testing.T) {
 		composerFile := filepath.Join(tempDir, "nonexistent.json")
 
 		composer, err := ReadJson(composerFile)
-		assert.Error(t, err)
-		assert.Nil(t, composer)
+		testassert.Error(t, err)
+		testassert.Nil(t, composer)
 	})
 
 	// Test with invalid JSON
@@ -175,11 +175,11 @@ func TestReadComposerJson(t *testing.T) {
 		composerFile := filepath.Join(tempDir, "invalid.json")
 
 		err := os.WriteFile(composerFile, []byte("{invalid json}"), 0o644)
-		assert.NoError(t, err)
+		testassert.NoError(t, err)
 
 		composer, err := ReadJson(composerFile)
-		assert.Error(t, err)
-		assert.Nil(t, composer)
+		testassert.Error(t, err)
+		testassert.Nil(t, composer)
 	})
 }
 
@@ -203,17 +203,17 @@ func TestReadComposerJsonDifferentRepositoryWritings(t *testing.T) {
 }
 `
 		err := os.WriteFile(composerFile, []byte(content), 0o644)
-		assert.NoError(t, err)
+		testassert.NoError(t, err)
 
 		composer, err := ReadJson(composerFile)
-		assert.NoError(t, err)
-		assert.Equal(t, composerFile, composer.path)
+		testassert.NoError(t, err)
+		testassert.Equal(t, composerFile, composer.path)
 
 		expectedRepos := []Repository{
 			{Type: "vcs", URL: "https://github.com/shopware/platform"},
 			{Type: "path", URL: "custom/plugins"},
 		}
-		assert.ElementsMatch(t, expectedRepos, composer.Repositories)
+		testassert.ElementsMatch(t, expectedRepos, composer.Repositories)
 	})
 
 	t.Run("repository map", func(t *testing.T) {
@@ -235,17 +235,17 @@ func TestReadComposerJsonDifferentRepositoryWritings(t *testing.T) {
 }
 `
 		err := os.WriteFile(composerFile, []byte(content), 0o644)
-		assert.NoError(t, err)
+		testassert.NoError(t, err)
 
 		composer, err := ReadJson(composerFile)
-		assert.NoError(t, err)
-		assert.Equal(t, composerFile, composer.path)
+		testassert.NoError(t, err)
+		testassert.Equal(t, composerFile, composer.path)
 
 		expectedRepos := []Repository{
 			{Type: "vcs", URL: "https://github.com/shopware/platform"},
 			{Type: "path", URL: "custom/plugins"},
 		}
-		assert.ElementsMatch(t, expectedRepos, composer.Repositories)
+		testassert.ElementsMatch(t, expectedRepos, composer.Repositories)
 	})
 }
 
@@ -260,30 +260,30 @@ func TestComposerJsonPreservesUnknownFields(t *testing.T) {
 
 		var composer Json
 		err := json.Unmarshal([]byte(input), &composer)
-		assert.NoError(t, err)
+		testassert.NoError(t, err)
 
 		// Known fields decode normally.
-		assert.Equal(t, "vendor/pkg", composer.Name)
-		assert.Equal(t, "^8.2", composer.Require["php"])
+		testassert.Equal(t, "vendor/pkg", composer.Name)
+		testassert.Equal(t, "^8.2", composer.Require["php"])
 
 		// Unknown keys are captured.
-		assert.Contains(t, composer.AdditionalFields, "future-key")
-		assert.Contains(t, composer.AdditionalFields, "some-flag")
-		assert.NotContains(t, composer.AdditionalFields, "name")
-		assert.NotContains(t, composer.AdditionalFields, "require")
+		testassert.Contains(t, composer.AdditionalFields, "future-key")
+		testassert.Contains(t, composer.AdditionalFields, "some-flag")
+		testassert.NotContains(t, composer.AdditionalFields, "name")
+		testassert.NotContains(t, composer.AdditionalFields, "require")
 
 		// Marshalling re-emits the unknown keys unchanged alongside the known
 		// fields. (Byte-for-byte equality is not asserted: the base struct
 		// always emits empty autoload/autoload-dev objects.)
 		out, err := json.Marshal(composer)
-		assert.NoError(t, err)
+		testassert.NoError(t, err)
 
 		var got map[string]json.RawMessage
-		assert.NoError(t, json.Unmarshal(out, &got))
-		assert.JSONEq(t, `{"nested": "value"}`, string(got["future-key"]))
-		assert.JSONEq(t, `true`, string(got["some-flag"]))
-		assert.JSONEq(t, `"vendor/pkg"`, string(got["name"]))
-		assert.JSONEq(t, `{"php": "^8.2"}`, string(got["require"]))
+		testassert.NoError(t, json.Unmarshal(out, &got))
+		testassert.JSONEq(t, `{"nested": "value"}`, string(got["future-key"]))
+		testassert.JSONEq(t, `true`, string(got["some-flag"]))
+		testassert.JSONEq(t, `"vendor/pkg"`, string(got["name"]))
+		testassert.JSONEq(t, `{"php": "^8.2"}`, string(got["require"]))
 	})
 
 	t.Run("modeled extra section is not treated as unknown", func(t *testing.T) {
@@ -291,18 +291,18 @@ func TestComposerJsonPreservesUnknownFields(t *testing.T) {
 
 		var composer Json
 		err := json.Unmarshal([]byte(input), &composer)
-		assert.NoError(t, err)
+		testassert.NoError(t, err)
 
 		// "extra" maps to the modeled Extra field, not AdditionalFields.
-		assert.Nil(t, composer.AdditionalFields)
-		assert.Contains(t, composer.Extra, "branch-alias")
+		testassert.Nil(t, composer.AdditionalFields)
+		testassert.Contains(t, composer.Extra, "branch-alias")
 	})
 
 	t.Run("no unknown keys leaves AdditionalFields nil", func(t *testing.T) {
 		var composer Json
 		err := json.Unmarshal([]byte(`{"name": "vendor/pkg"}`), &composer)
-		assert.NoError(t, err)
-		assert.Nil(t, composer.AdditionalFields)
+		testassert.NoError(t, err)
+		testassert.Nil(t, composer.AdditionalFields)
 	})
 
 	t.Run("unknown keys survive read/save to disk", func(t *testing.T) {
@@ -311,24 +311,24 @@ func TestComposerJsonPreservesUnknownFields(t *testing.T) {
 
 		input := `{"name":"vendor/pkg","future-key":{"nested":"value"}}`
 		err := os.WriteFile(composerFile, []byte(input), 0o644)
-		assert.NoError(t, err)
+		testassert.NoError(t, err)
 
 		composer, err := ReadJson(composerFile)
-		assert.NoError(t, err)
-		assert.Contains(t, composer.AdditionalFields, "future-key")
+		testassert.NoError(t, err)
+		testassert.Contains(t, composer.AdditionalFields, "future-key")
 
 		err = composer.Save()
-		assert.NoError(t, err)
+		testassert.NoError(t, err)
 
 		written, err := os.ReadFile(composerFile)
-		assert.NoError(t, err)
+		testassert.NoError(t, err)
 
 		var roundTripped Json
 		err = json.Unmarshal(written, &roundTripped)
-		assert.NoError(t, err)
-		assert.Equal(t, "vendor/pkg", roundTripped.Name)
-		assert.Contains(t, roundTripped.AdditionalFields, "future-key")
-		assert.JSONEq(t, `{"nested":"value"}`, string(roundTripped.AdditionalFields["future-key"]))
+		testassert.NoError(t, err)
+		testassert.Equal(t, "vendor/pkg", roundTripped.Name)
+		testassert.Contains(t, roundTripped.AdditionalFields, "future-key")
+		testassert.JSONEq(t, `{"nested":"value"}`, string(roundTripped.AdditionalFields["future-key"]))
 	})
 }
 
@@ -336,52 +336,52 @@ func TestStringOrSliceRoundTrip(t *testing.T) {
 	t.Run("license as single string stays scalar", func(t *testing.T) {
 		var c Json
 		err := json.Unmarshal([]byte(`{"name":"a/b","license":"MIT"}`), &c)
-		assert.NoError(t, err)
-		assert.Equal(t, []string{"MIT"}, c.License.Strings())
-		assert.Equal(t, "MIT", c.License.First())
+		testassert.NoError(t, err)
+		testassert.Equal(t, []string{"MIT"}, c.License.Strings())
+		testassert.Equal(t, "MIT", c.License.First())
 
 		out, err := json.Marshal(c)
-		assert.NoError(t, err)
-		assert.Contains(t, string(out), `"license":"MIT"`)
+		testassert.NoError(t, err)
+		testassert.Contains(t, string(out), `"license":"MIT"`)
 	})
 
 	t.Run("license as array stays array", func(t *testing.T) {
 		var c Json
 		err := json.Unmarshal([]byte(`{"name":"a/b","license":["MIT","Apache-2.0"]}`), &c)
-		assert.NoError(t, err)
-		assert.Equal(t, []string{"MIT", "Apache-2.0"}, c.License.Strings())
+		testassert.NoError(t, err)
+		testassert.Equal(t, []string{"MIT", "Apache-2.0"}, c.License.Strings())
 
 		out, err := json.Marshal(c)
-		assert.NoError(t, err)
-		assert.Contains(t, string(out), `"license":["MIT","Apache-2.0"]`)
+		testassert.NoError(t, err)
+		testassert.Contains(t, string(out), `"license":["MIT","Apache-2.0"]`)
 	})
 
 	t.Run("bin accepts single string", func(t *testing.T) {
 		var c Json
 		err := json.Unmarshal([]byte(`{"name":"a/b","bin":"bin/foo"}`), &c)
-		assert.NoError(t, err)
-		assert.Equal(t, []string{"bin/foo"}, c.Bin.Strings())
+		testassert.NoError(t, err)
+		testassert.Equal(t, []string{"bin/foo"}, c.Bin.Strings())
 
 		out, err := json.Marshal(c)
-		assert.NoError(t, err)
-		assert.Contains(t, string(out), `"bin":"bin/foo"`)
+		testassert.NoError(t, err)
+		testassert.Contains(t, string(out), `"bin":"bin/foo"`)
 	})
 
 	t.Run("bin accepts array", func(t *testing.T) {
 		var c Json
 		err := json.Unmarshal([]byte(`{"name":"a/b","bin":["bin/a","bin/b"]}`), &c)
-		assert.NoError(t, err)
-		assert.Equal(t, []string{"bin/a", "bin/b"}, c.Bin.Strings())
+		testassert.NoError(t, err)
+		testassert.Equal(t, []string{"bin/a", "bin/b"}, c.Bin.Strings())
 	})
 
 	t.Run("constructors set shape", func(t *testing.T) {
 		single, err := json.Marshal(NewString("MIT"))
-		assert.NoError(t, err)
-		assert.JSONEq(t, `"MIT"`, string(single))
+		testassert.NoError(t, err)
+		testassert.JSONEq(t, `"MIT"`, string(single))
 
 		multi, err := json.Marshal(NewStrings("MIT", "GPL-3.0"))
-		assert.NoError(t, err)
-		assert.JSONEq(t, `["MIT","GPL-3.0"]`, string(multi))
+		testassert.NoError(t, err)
+		testassert.JSONEq(t, `["MIT","GPL-3.0"]`, string(multi))
 	})
 }
 
@@ -389,41 +389,41 @@ func TestBoolOrStringRoundTrip(t *testing.T) {
 	t.Run("abandoned true", func(t *testing.T) {
 		var c Json
 		err := json.Unmarshal([]byte(`{"name":"a/b","abandoned":true}`), &c)
-		assert.NoError(t, err)
-		assert.True(t, c.Abandoned.IsAbandoned())
-		assert.Equal(t, "", c.Abandoned.Replacement())
+		testassert.NoError(t, err)
+		testassert.True(t, c.Abandoned.IsAbandoned())
+		testassert.Equal(t, "", c.Abandoned.Replacement())
 
 		out, err := json.Marshal(c)
-		assert.NoError(t, err)
-		assert.Contains(t, string(out), `"abandoned":true`)
+		testassert.NoError(t, err)
+		testassert.Contains(t, string(out), `"abandoned":true`)
 	})
 
 	t.Run("abandoned with replacement", func(t *testing.T) {
 		var c Json
 		err := json.Unmarshal([]byte(`{"name":"a/b","abandoned":"vendor/new"}`), &c)
-		assert.NoError(t, err)
-		assert.True(t, c.Abandoned.IsAbandoned())
-		assert.Equal(t, "vendor/new", c.Abandoned.Replacement())
+		testassert.NoError(t, err)
+		testassert.True(t, c.Abandoned.IsAbandoned())
+		testassert.Equal(t, "vendor/new", c.Abandoned.Replacement())
 
 		out, err := json.Marshal(c)
-		assert.NoError(t, err)
-		assert.Contains(t, string(out), `"abandoned":"vendor/new"`)
+		testassert.NoError(t, err)
+		testassert.Contains(t, string(out), `"abandoned":"vendor/new"`)
 	})
 
 	t.Run("nil receiver is not abandoned", func(t *testing.T) {
 		var c Json
-		assert.False(t, c.Abandoned.IsAbandoned())
-		assert.Equal(t, "", c.Abandoned.Replacement())
+		testassert.False(t, c.Abandoned.IsAbandoned())
+		testassert.Equal(t, "", c.Abandoned.Replacement())
 	})
 
 	t.Run("constructors", func(t *testing.T) {
 		b, err := json.Marshal(NewAbandonedBool(true))
-		assert.NoError(t, err)
-		assert.JSONEq(t, `true`, string(b))
+		testassert.NoError(t, err)
+		testassert.JSONEq(t, `true`, string(b))
 
 		s, err := json.Marshal(NewAbandonedReplacement("vendor/new"))
-		assert.NoError(t, err)
-		assert.JSONEq(t, `"vendor/new"`, string(s))
+		testassert.NoError(t, err)
+		testassert.JSONEq(t, `"vendor/new"`, string(s))
 	})
 }
 
@@ -443,76 +443,76 @@ func TestComposerJsonNewTypedFields(t *testing.T) {
 
 	var c Json
 	err := json.Unmarshal([]byte(input), &c)
-	assert.NoError(t, err)
+	testassert.NoError(t, err)
 
-	assert.Equal(t, "git", c.Source.Type)
-	assert.Equal(t, "https://example.com/a.git", c.Source.URL)
-	assert.Equal(t, "deadbeef", c.Dist.Shasum)
-	assert.Equal(t, "a-archive", c.Archive.Name)
-	assert.Equal(t, []string{"/tests"}, c.Archive.Exclude)
-	assert.Equal(t, []string{"lib/"}, c.IncludePath)
-	assert.Equal(t, "Acme/Foo", c.TargetDir)
-	assert.NotNil(t, c.DefaultBranch)
-	assert.True(t, *c.DefaultBranch)
-	assert.Equal(t, "ext-foo", c.PHPExt["extension-name"])
-	assert.Equal(t, "Runs tests", c.ScriptsDescriptions["test"])
-	assert.Equal(t, []string{"phpunit"}, c.ScriptsAliases["test"])
+	testassert.Equal(t, "git", c.Source.Type)
+	testassert.Equal(t, "https://example.com/a.git", c.Source.URL)
+	testassert.Equal(t, "deadbeef", c.Dist.Shasum)
+	testassert.Equal(t, "a-archive", c.Archive.Name)
+	testassert.Equal(t, []string{"/tests"}, c.Archive.Exclude)
+	testassert.Equal(t, []string{"lib/"}, c.IncludePath)
+	testassert.Equal(t, "Acme/Foo", c.TargetDir)
+	testassert.NotNil(t, c.DefaultBranch)
+	testassert.True(t, *c.DefaultBranch)
+	testassert.Equal(t, "ext-foo", c.PHPExt["extension-name"])
+	testassert.Equal(t, "Runs tests", c.ScriptsDescriptions["test"])
+	testassert.Equal(t, []string{"phpunit"}, c.ScriptsAliases["test"])
 
 	// None of these typed keys should leak into AdditionalFields.
-	assert.Nil(t, c.AdditionalFields)
+	testassert.Nil(t, c.AdditionalFields)
 }
 
 func TestComposerJsonManipulationVerbs(t *testing.T) {
 	c := &Json{}
 
 	c.AddPackage("symfony/console", "^6.0")
-	assert.True(t, c.HasPackage("symfony/console"))
+	testassert.True(t, c.HasPackage("symfony/console"))
 	c.RemovePackage("symfony/console")
-	assert.False(t, c.HasPackage("symfony/console"))
+	testassert.False(t, c.HasPackage("symfony/console"))
 
 	c.AddPackageDev("phpunit/phpunit", "^10.0")
-	assert.True(t, c.HasPackageDev("phpunit/phpunit"))
+	testassert.True(t, c.HasPackageDev("phpunit/phpunit"))
 	c.RemovePackageDev("phpunit/phpunit")
-	assert.False(t, c.HasPackageDev("phpunit/phpunit"))
+	testassert.False(t, c.HasPackageDev("phpunit/phpunit"))
 
 	// EnsurePackage adds only when missing from both require and require-dev.
-	assert.True(t, c.EnsurePackage("symfony/http-foundation", "^6.0"))
-	assert.True(t, c.HasPackage("symfony/http-foundation"))
-	assert.Equal(t, "^6.0", c.Require["symfony/http-foundation"])
+	testassert.True(t, c.EnsurePackage("symfony/http-foundation", "^6.0"))
+	testassert.True(t, c.HasPackage("symfony/http-foundation"))
+	testassert.Equal(t, "^6.0", c.Require["symfony/http-foundation"])
 	// Already in require: no-op, keeps existing constraint.
-	assert.False(t, c.EnsurePackage("symfony/http-foundation", "^7.0"))
-	assert.Equal(t, "^6.0", c.Require["symfony/http-foundation"])
+	testassert.False(t, c.EnsurePackage("symfony/http-foundation", "^7.0"))
+	testassert.Equal(t, "^6.0", c.Require["symfony/http-foundation"])
 	// Present in require-dev: also a no-op for EnsurePackage.
 	c.AddPackageDev("friendsofphp/php-cs-fixer", "^3.0")
-	assert.False(t, c.EnsurePackage("friendsofphp/php-cs-fixer", "^4.0"))
-	assert.False(t, c.HasPackage("friendsofphp/php-cs-fixer"))
-	assert.Equal(t, "^3.0", c.RequireDev["friendsofphp/php-cs-fixer"])
+	testassert.False(t, c.EnsurePackage("friendsofphp/php-cs-fixer", "^4.0"))
+	testassert.False(t, c.HasPackage("friendsofphp/php-cs-fixer"))
+	testassert.Equal(t, "^3.0", c.RequireDev["friendsofphp/php-cs-fixer"])
 
 	// EnsurePackageDev adds only when missing from both require and require-dev.
-	assert.True(t, c.EnsurePackageDev("phpunit/phpunit", "^10.0"))
-	assert.True(t, c.HasPackageDev("phpunit/phpunit"))
-	assert.Equal(t, "^10.0", c.RequireDev["phpunit/phpunit"])
+	testassert.True(t, c.EnsurePackageDev("phpunit/phpunit", "^10.0"))
+	testassert.True(t, c.HasPackageDev("phpunit/phpunit"))
+	testassert.Equal(t, "^10.0", c.RequireDev["phpunit/phpunit"])
 	// Already in require-dev: no-op.
-	assert.False(t, c.EnsurePackageDev("phpunit/phpunit", "^11.0"))
-	assert.Equal(t, "^10.0", c.RequireDev["phpunit/phpunit"])
+	testassert.False(t, c.EnsurePackageDev("phpunit/phpunit", "^11.0"))
+	testassert.Equal(t, "^10.0", c.RequireDev["phpunit/phpunit"])
 	// Present in require: also a no-op for EnsurePackageDev.
-	assert.False(t, c.EnsurePackageDev("symfony/http-foundation", "^7.0"))
-	assert.False(t, c.HasPackageDev("symfony/http-foundation"))
-	assert.Equal(t, "^6.0", c.Require["symfony/http-foundation"])
+	testassert.False(t, c.EnsurePackageDev("symfony/http-foundation", "^7.0"))
+	testassert.False(t, c.HasPackageDev("symfony/http-foundation"))
+	testassert.Equal(t, "^6.0", c.Require["symfony/http-foundation"])
 
 	repo := Repository{Type: "vcs", URL: "https://example.com/r.git"}
 	c.AddRepository(repo)
-	assert.True(t, c.Repositories.HasRepository("https://example.com/r.git"))
+	testassert.True(t, c.Repositories.HasRepository("https://example.com/r.git"))
 	// Adding the same URL again is a no-op.
 	c.AddRepository(repo)
-	assert.Len(t, c.Repositories, 1)
+	testassert.Len(t, c.Repositories, 1)
 	c.RemoveRepository("https://example.com/r.git")
-	assert.False(t, c.Repositories.HasRepository("https://example.com/r.git"))
+	testassert.False(t, c.Repositories.HasRepository("https://example.com/r.git"))
 
 	c.SetConfig("sort-packages", true)
-	assert.True(t, c.HasConfig("sort-packages"))
+	testassert.True(t, c.HasConfig("sort-packages"))
 	c.RemoveConfig("sort-packages")
-	assert.False(t, c.HasConfig("sort-packages"))
+	testassert.False(t, c.HasConfig("sort-packages"))
 }
 
 func TestComposerJsonPreservesKeyOrder(t *testing.T) {
@@ -520,37 +520,37 @@ func TestComposerJsonPreservesKeyOrder(t *testing.T) {
 		input := `{"type":"library","name":"a/b","require":{"php":"^8.2"},"description":"x"}`
 		var c Json
 		err := json.Unmarshal([]byte(input), &c)
-		assert.NoError(t, err)
+		testassert.NoError(t, err)
 
 		out, err := json.Marshal(c)
-		assert.NoError(t, err)
-		assert.Equal(t, input, string(out))
+		testassert.NoError(t, err)
+		testassert.Equal(t, input, string(out))
 	})
 
 	t.Run("no empty autoload emitted when absent", func(t *testing.T) {
 		var c Json
 		err := json.Unmarshal([]byte(`{"name":"a/b"}`), &c)
-		assert.NoError(t, err)
+		testassert.NoError(t, err)
 		out, err := json.Marshal(c)
-		assert.NoError(t, err)
-		assert.NotContains(t, string(out), "autoload")
+		testassert.NoError(t, err)
+		testassert.NotContains(t, string(out), "autoload")
 	})
 
 	t.Run("newly added keys appended deterministically", func(t *testing.T) {
 		input := `{"name":"a/b"}`
 		var c Json
 		err := json.Unmarshal([]byte(input), &c)
-		assert.NoError(t, err)
+		testassert.NoError(t, err)
 		c.AddPackage("php", "^8.2")
 		c.Description = "added"
 
 		out, err := json.Marshal(c)
-		assert.NoError(t, err)
+		testassert.NoError(t, err)
 		// name stays first (original order); new keys appended in sorted order.
-		assert.True(t, len(string(out)) > len(input))
-		assert.Contains(t, string(out), `"name":"a/b"`)
-		assert.Contains(t, string(out), `"description":"added"`)
-		assert.Contains(t, string(out), `"require":{"php":"^8.2"}`)
+		testassert.True(t, len(string(out)) > len(input))
+		testassert.Contains(t, string(out), `"name":"a/b"`)
+		testassert.Contains(t, string(out), `"description":"added"`)
+		testassert.Contains(t, string(out), `"require":{"php":"^8.2"}`)
 	})
 
 	t.Run("order survives save to disk", func(t *testing.T) {
@@ -558,19 +558,19 @@ func TestComposerJsonPreservesKeyOrder(t *testing.T) {
 		file := dir + "/composer.json"
 		input := "{\n  \"type\": \"library\",\n  \"name\": \"a/b\"\n}"
 		err := os.WriteFile(file, []byte(input), 0o644)
-		assert.NoError(t, err)
+		testassert.NoError(t, err)
 
 		c, err := ReadJson(file)
-		assert.NoError(t, err)
+		testassert.NoError(t, err)
 		err = c.Save()
-		assert.NoError(t, err)
+		testassert.NoError(t, err)
 
 		written, err := os.ReadFile(file)
-		assert.NoError(t, err)
+		testassert.NoError(t, err)
 		// "type" must still precede "name".
 		typeIdx := indexOf(string(written), `"type"`)
 		nameIdx := indexOf(string(written), `"name"`)
-		assert.True(t, typeIdx >= 0 && nameIdx >= 0 && typeIdx < nameIdx, "type should precede name; got: %s", written)
+		testassert.True(t, typeIdx >= 0 && nameIdx >= 0 && typeIdx < nameIdx, fmt.Sprintf("type should precede name; got: %s", written))
 	})
 }
 
@@ -590,44 +590,44 @@ func TestComposerJsonExplicitFalseBoolsSurvive(t *testing.T) {
 	t.Run("prefer-stable false survives", func(t *testing.T) {
 		var c Json
 		err := json.Unmarshal([]byte(`{"name":"a/b","prefer-stable":false}`), &c)
-		assert.NoError(t, err)
-		assert.NotNil(t, c.PreferStable)
-		assert.False(t, *c.PreferStable)
+		testassert.NoError(t, err)
+		testassert.NotNil(t, c.PreferStable)
+		testassert.False(t, *c.PreferStable)
 
 		out, err := json.Marshal(c)
-		assert.NoError(t, err)
-		assert.Contains(t, string(out), `"prefer-stable":false`)
+		testassert.NoError(t, err)
+		testassert.Contains(t, string(out), `"prefer-stable":false`)
 	})
 
 	t.Run("default-branch false survives", func(t *testing.T) {
 		var c Json
 		err := json.Unmarshal([]byte(`{"name":"a/b","default-branch":false}`), &c)
-		assert.NoError(t, err)
-		assert.NotNil(t, c.DefaultBranch)
-		assert.False(t, *c.DefaultBranch)
+		testassert.NoError(t, err)
+		testassert.NotNil(t, c.DefaultBranch)
+		testassert.False(t, *c.DefaultBranch)
 
 		out, err := json.Marshal(c)
-		assert.NoError(t, err)
-		assert.Contains(t, string(out), `"default-branch":false`)
+		testassert.NoError(t, err)
+		testassert.Contains(t, string(out), `"default-branch":false`)
 	})
 
 	t.Run("absent stays absent", func(t *testing.T) {
 		var c Json
 		err := json.Unmarshal([]byte(`{"name":"a/b"}`), &c)
-		assert.NoError(t, err)
-		assert.Nil(t, c.PreferStable)
-		assert.Nil(t, c.DefaultBranch)
+		testassert.NoError(t, err)
+		testassert.Nil(t, c.PreferStable)
+		testassert.Nil(t, c.DefaultBranch)
 
 		out, err := json.Marshal(c)
-		assert.NoError(t, err)
-		assert.NotContains(t, string(out), "prefer-stable")
-		assert.NotContains(t, string(out), "default-branch")
+		testassert.NoError(t, err)
+		testassert.NotContains(t, string(out), "prefer-stable")
+		testassert.NotContains(t, string(out), "default-branch")
 	})
 
 	t.Run("true survives via Bool helper", func(t *testing.T) {
 		c := Json{Name: "a/b", PreferStable: Bool(true)}
 		out, err := json.Marshal(c)
-		assert.NoError(t, err)
-		assert.Contains(t, string(out), `"prefer-stable":true`)
+		testassert.NoError(t, err)
+		testassert.Contains(t, string(out), `"prefer-stable":true`)
 	})
 }
