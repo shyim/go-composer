@@ -148,7 +148,8 @@ func TestPackagesJSONAdvertisesCapabilities(t *testing.T) {
 		assert.Equal(t, []string{"acme/lib"}, root.AvailablePackages)
 		assert.NotEmpty(t, root.SearchURL)
 		require.NotNil(t, root.SecurityAdvisories)
-		assert.NotEmpty(t, root.SecurityAdvisories.APIURL)
+		assert.True(t, root.SecurityAdvisories.Metadata)
+		assert.Equal(t, "/security-advisories.json", root.SecurityAdvisories.APIURL)
 	})
 
 	t.Run("minimal provider", func(t *testing.T) {
@@ -157,6 +158,25 @@ func TestPackagesJSONAdvertisesCapabilities(t *testing.T) {
 		assert.Equal(t, "/p2/%package%.json", root.MetadataURL)
 		assert.Empty(t, root.AvailablePackages)
 		assert.Empty(t, root.SearchURL)
+		assert.Nil(t, root.SecurityAdvisories)
+	})
+
+	t.Run("api-only advisories", func(t *testing.T) {
+		root := fetchRootOpts(t, sampleProvider(), repository.WithAdvisories(false, true))
+		require.NotNil(t, root.SecurityAdvisories)
+		assert.False(t, root.SecurityAdvisories.Metadata)
+		assert.Equal(t, "/security-advisories.json", root.SecurityAdvisories.APIURL)
+	})
+
+	t.Run("metadata-only advisories", func(t *testing.T) {
+		root := fetchRootOpts(t, sampleProvider(), repository.WithAdvisories(true, false))
+		require.NotNil(t, root.SecurityAdvisories)
+		assert.True(t, root.SecurityAdvisories.Metadata)
+		assert.Empty(t, root.SecurityAdvisories.APIURL)
+	})
+
+	t.Run("advisories fully disabled", func(t *testing.T) {
+		root := fetchRootOpts(t, sampleProvider(), repository.WithAdvisories(false, false))
 		assert.Nil(t, root.SecurityAdvisories)
 	})
 }
@@ -183,6 +203,76 @@ func TestAdvisoriesEndpoint(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, adv["acme/lib"], 1)
 	assert.Equal(t, "CVE-1", adv["acme/lib"][0].CVE)
+	assert.Equal(t, "acme/lib", adv["acme/lib"][0].PackageName)
+}
+
+func TestMetadataEmbedsAdvisories(t *testing.T) {
+	srv := httptest.NewServer(repository.NewHandler(sampleProvider()))
+	t.Cleanup(srv.Close)
+
+	// Stable metadata carries the advisory list.
+	resp, err := http.Get(srv.URL + "/p2/acme/lib.json")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var meta repository.Metadata
+	require.NoError(t, decodeJSON(resp, &meta))
+	require.Len(t, meta.SecurityAdvisories, 1)
+	assert.Equal(t, "PKSA-1", meta.SecurityAdvisories[0].AdvisoryID)
+	assert.Equal(t, "<1.0.1", meta.SecurityAdvisories[0].AffectedVersions)
+	assert.Equal(t, "acme/lib", meta.SecurityAdvisories[0].PackageName)
+
+	// Dev metadata must not embed advisories.
+	devResp, err := http.Get(srv.URL + "/p2/acme/lib~dev.json")
+	require.NoError(t, err)
+	defer devResp.Body.Close()
+	require.Equal(t, http.StatusOK, devResp.StatusCode)
+	var devMeta repository.Metadata
+	require.NoError(t, decodeJSON(devResp, &devMeta))
+	assert.Empty(t, devMeta.SecurityAdvisories)
+}
+
+func TestMetadataOnlyAdvisoriesClientRoundTrip(t *testing.T) {
+	// Serve only via embedded metadata (no API endpoint) and let the client
+	// fall back to the p2 file.
+	c := newClient(t, sampleProvider(), repository.WithAdvisories(true, false))
+
+	// Endpoint must not be wired.
+	root := fetchRootOpts(t, sampleProvider(), repository.WithAdvisories(true, false))
+	require.NotNil(t, root.SecurityAdvisories)
+	assert.True(t, root.SecurityAdvisories.Metadata)
+	assert.Empty(t, root.SecurityAdvisories.APIURL)
+
+	adv, err := c.GetSecurityAdvisories(context.Background(), []string{"acme/lib"})
+	require.NoError(t, err)
+	require.Len(t, adv["acme/lib"], 1)
+	assert.Equal(t, "PKSA-1", adv["acme/lib"][0].AdvisoryID)
+	assert.Equal(t, "CVE-1", adv["acme/lib"][0].CVE)
+}
+
+func TestWithAdvisoriesDisablesAPIEndpoint(t *testing.T) {
+	srv := httptest.NewServer(repository.NewHandler(sampleProvider(), repository.WithAdvisories(true, false)))
+	t.Cleanup(srv.Close)
+
+	resp, err := http.PostForm(srv.URL+"/security-advisories.json", url.Values{"packages[]": {"acme/lib"}})
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+}
+
+func TestWithAdvisoriesDisablesMetadataEmbed(t *testing.T) {
+	srv := httptest.NewServer(repository.NewHandler(sampleProvider(), repository.WithAdvisories(false, true)))
+	t.Cleanup(srv.Close)
+
+	resp, err := http.Get(srv.URL + "/p2/acme/lib.json")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var meta repository.Metadata
+	require.NoError(t, decodeJSON(resp, &meta))
+	assert.Empty(t, meta.SecurityAdvisories)
 }
 
 func TestPackageNotFound(t *testing.T) {
@@ -248,7 +338,12 @@ func decodeJSON(resp *http.Response, v any) error {
 
 func fetchRoot(t *testing.T, p repository.Provider) repository.RootFile {
 	t.Helper()
-	srv := httptest.NewServer(repository.NewHandler(p))
+	return fetchRootOpts(t, p)
+}
+
+func fetchRootOpts(t *testing.T, p repository.Provider, opts ...repository.HandlerOption) repository.RootFile {
+	t.Helper()
+	srv := httptest.NewServer(repository.NewHandler(p, opts...))
 	t.Cleanup(srv.Close)
 
 	resp, err := http.Get(srv.URL + "/packages.json")

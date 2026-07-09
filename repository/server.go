@@ -32,8 +32,17 @@ type Searcher interface {
 }
 
 // Advisor is an optional capability: a Provider that reports security
-// advisories. When implemented, the server advertises and serves a
-// security-advisories API endpoint.
+// advisories. When implemented, the server:
+//
+//   - advertises security-advisories.api-url and serves
+//     POST /security-advisories.json (full advisories, batch lookup);
+//   - advertises security-advisories.metadata=true and embeds that package's
+//     advisories in its stable /p2/<name>.json metadata document (Composer
+//     clients and audit tools that prefer local metadata can use them without
+//     an extra round-trip).
+//
+// Use WithAdvisories to turn either channel off. Implementations should return
+// only packages that have advisories; empty maps/slices are fine.
 type Advisor interface {
 	SecurityAdvisories(ctx context.Context, names []string) (map[string][]SecurityAdvisory, error)
 }
@@ -59,6 +68,11 @@ type Handler struct {
 	provider Provider
 	isDev    func(v Version) bool
 	mux      *http.ServeMux
+
+	// Advisory delivery channels. Defaults are set to true when the provider
+	// implements Advisor; overridden by WithAdvisories.
+	advisoryMetadata bool
+	advisoryAPI      bool
 }
 
 // HandlerOption configures a Handler.
@@ -72,6 +86,22 @@ func WithDevClassifier(isDev func(v Version) bool) HandlerOption {
 	return func(h *Handler) { h.isDev = isDev }
 }
 
+// WithAdvisories controls how a provider that implements Advisor publishes
+// advisories. metadata embeds them in stable per-package metadata and sets
+// security-advisories.metadata; api serves POST /security-advisories.json and
+// sets security-advisories.api-url. Both default to true when Advisor is
+// implemented. Passing (false, false) disables advisory delivery entirely.
+//
+// When only metadata is enabled, configure PackageLister so clients can scope
+// lookup efficiently — Composer requires available-packages (or patterns)
+// for metadata-only advisory repositories without an api-url.
+func WithAdvisories(metadata, api bool) HandlerOption {
+	return func(h *Handler) {
+		h.advisoryMetadata = metadata
+		h.advisoryAPI = api
+	}
+}
+
 // NewHandler builds an http.Handler serving the repository protocol for p.
 // Search and security-advisory endpoints are wired only when p implements the
 // Searcher and Advisor capabilities respectively.
@@ -79,6 +109,10 @@ func NewHandler(p Provider, opts ...HandlerOption) http.Handler {
 	h := &Handler{
 		provider: p,
 		isDev:    defaultIsDev,
+	}
+	if _, ok := p.(Advisor); ok {
+		h.advisoryMetadata = true
+		h.advisoryAPI = true
 	}
 	for _, opt := range opts {
 		opt(h)
@@ -90,7 +124,7 @@ func NewHandler(p Provider, opts ...HandlerOption) http.Handler {
 	if _, ok := p.(Searcher); ok {
 		h.mux.HandleFunc(searchPath, h.handleSearch)
 	}
-	if _, ok := p.(Advisor); ok {
+	if _, ok := p.(Advisor); ok && h.advisoryAPI {
 		h.mux.HandleFunc(advisoriesPath, h.handleAdvisories)
 	}
 
@@ -125,8 +159,12 @@ func (h *Handler) handlePackagesJSON(w http.ResponseWriter, r *http.Request) {
 		root.SearchURL = searchURLTemplate
 	}
 
-	if _, ok := h.provider.(Advisor); ok {
-		root.SecurityAdvisories = &SecurityAdvisoriesConfig{APIURL: advisoriesPath}
+	if _, ok := h.provider.(Advisor); ok && (h.advisoryMetadata || h.advisoryAPI) {
+		cfg := &SecurityAdvisoriesConfig{Metadata: h.advisoryMetadata}
+		if h.advisoryAPI {
+			cfg.APIURL = advisoriesPath
+		}
+		root.SecurityAdvisories = cfg
 	}
 
 	writeJSON(w, root)
@@ -163,10 +201,63 @@ func (h *Handler) handleMetadata(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, Metadata{
+	meta := Metadata{
 		Minified: minifiedComposer2,
 		Packages: map[string]json.RawMessage{name: raw},
-	})
+	}
+
+	// Embed advisories only in the stable metadata file, matching packagist.org
+	// (dev files never carry security-advisories).
+	if !dev && h.advisoryMetadata {
+		if list, err := h.packageAdvisories(r.Context(), name); err != nil {
+			httpError(w, err)
+			return
+		} else if len(list) > 0 {
+			meta.SecurityAdvisories = list
+		}
+	}
+
+	writeJSON(w, meta)
+}
+
+// packageAdvisories loads advisories for a single package from the Advisor
+// capability, filling PackageName when the provider leaves it empty. Returns
+// nil with no error when the provider is not an Advisor or has no entry.
+func (h *Handler) packageAdvisories(ctx context.Context, name string) ([]SecurityAdvisory, error) {
+	advisor, ok := h.provider.(Advisor)
+	if !ok {
+		return nil, nil
+	}
+	adv, err := advisor.SecurityAdvisories(ctx, []string{name})
+	if err != nil {
+		return nil, err
+	}
+	list := lookupAdvisories(adv, name)
+	normalizeAdvisoryPackageNames(list, name)
+	return list, nil
+}
+
+// lookupAdvisories returns advisories[name], falling back to a case-insensitive
+// key match (Composer package names are case-insensitive).
+func lookupAdvisories(adv map[string][]SecurityAdvisory, name string) []SecurityAdvisory {
+	if list, ok := adv[name]; ok {
+		return list
+	}
+	for k, list := range adv {
+		if strings.EqualFold(k, name) {
+			return list
+		}
+	}
+	return nil
+}
+
+// normalizeAdvisoryPackageNames sets PackageName on entries that omit it.
+func normalizeAdvisoryPackageNames(list []SecurityAdvisory, name string) {
+	for i := range list {
+		if list[i].PackageName == "" {
+			list[i].PackageName = name
+		}
+	}
 }
 
 func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
@@ -205,6 +296,10 @@ func (h *Handler) handleAdvisories(w http.ResponseWriter, r *http.Request) {
 	}
 	if advisories == nil {
 		advisories = map[string][]SecurityAdvisory{}
+	}
+	for name, list := range advisories {
+		normalizeAdvisoryPackageNames(list, name)
+		advisories[name] = list
 	}
 
 	writeJSON(w, struct {
