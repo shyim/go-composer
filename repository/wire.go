@@ -35,10 +35,14 @@ type SecurityAdvisoriesConfig struct {
 // keyed by name under Packages, each value being a JSON array of version
 // objects. When Minified is "composer/2.0" those arrays are delta-encoded and
 // must be passed through Expand (the client does this automatically).
+//
+// SecurityAdvisories, when present, is the list of (often partial) advisories
+// for the package whose metadata this document describes. Composer emits a
+// bare list here — not a map keyed by package name.
 type Metadata struct {
-	Minified           string                        `json:"minified,omitempty"`
-	Packages           map[string]json.RawMessage    `json:"packages"`
-	SecurityAdvisories map[string][]SecurityAdvisory `json:"security-advisories,omitempty"`
+	Minified           string                     `json:"minified,omitempty"`
+	Packages           map[string]json.RawMessage `json:"packages"`
+	SecurityAdvisories []SecurityAdvisory         `json:"security-advisories,omitempty"`
 }
 
 // knowsPackage reports whether name is covered by the repository's advertised

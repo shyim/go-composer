@@ -56,13 +56,55 @@ metadata repository.
 |---|---|---|
 | `PackageLister` | `PackageNames(ctx) ([]string, error)` | adds `available-packages` to packages.json (marks the repo finite) |
 | `Searcher` | `Search(ctx, query) ([]repository.SearchResult, error)` | serves `GET /search.json?q=` |
-| `Advisor` | `SecurityAdvisories(ctx, names) (map[string][]repository.SecurityAdvisory, error)` | serves `POST /security-advisories.json` |
+| `Advisor` | `SecurityAdvisories(ctx, names) (map[string][]repository.SecurityAdvisory, error)` | serves `POST /security-advisories.json` **and** embeds advisories in stable `/p2/...json` metadata |
 
 ```go
 func (p *myProvider) PackageNames(ctx context.Context) ([]string, error) {
 	return []string{"acme/lib", "acme/tool"}, nil
 }
+
+func (p *myProvider) SecurityAdvisories(ctx context.Context, names []string) (map[string][]repository.SecurityAdvisory, error) {
+	out := map[string][]repository.SecurityAdvisory{}
+	for _, name := range names {
+		if list := p.lookupAdvisories(name); len(list) > 0 {
+			out[name] = list
+		}
+	}
+	return out, nil
+}
 ```
+
+### Security advisories delivery
+
+When a provider implements `Advisor`, the handler by default publishes advisories
+over **both** channels Composer supports (packagist.org does the same):
+
+1. **API** — `security-advisories.api-url` → `POST /security-advisories.json`
+   with form field `packages[]`. Preferred by clients for full advisories
+   (title, CVE, sources, severity).
+2. **Metadata** — `security-advisories.metadata=true`, and each stable
+   `/p2/<vendor>/<pkg>.json` document gains a top-level `security-advisories`
+   **list** (not a map) next to `packages`. Development (`~dev.json`) files
+   never carry advisories.
+
+Control the channels with `WithAdvisories(metadata, api)`:
+
+```go
+// Metadata embed only (no batch API). Prefer this together with PackageLister
+// so clients can avoid probing packages you do not know.
+h := repository.NewHandler(p, repository.WithAdvisories(true, false))
+
+// Batch API only — no per-package embed (reduces metadata size for huge advisory sets).
+h = repository.NewHandler(p, repository.WithAdvisories(false, true))
+
+// Disable entirely even though Advisor is implemented.
+h = repository.NewHandler(p, repository.WithAdvisories(false, false))
+```
+
+> Composer rejects metadata-only advisory repositories that advertise neither
+> `available-packages` nor `available-package-patterns`: without an api-url it
+> needs a finite package list to know which metadata files to fetch. Implement
+> `PackageLister` when serving metadata-only advisories.
 
 ## Stable vs. development split
 

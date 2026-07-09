@@ -94,3 +94,29 @@ func (s *Set) Search(ctx context.Context, query string) ([]SearchResult, error) 
 	}
 	return results, nil
 }
+
+// GetSecurityAdvisories queries every repository and merges their advisories
+// by package name into an Advisories value. When several repositories report
+// advisories for the same package, the lists are concatenated in repository
+// order (duplicates are not deduplicated — callers that need uniqueness can
+// key on AdvisoryID). Errors from individual repositories abort the query.
+// Repositories without advisory support contribute nothing.
+func (s *Set) GetSecurityAdvisories(ctx context.Context, packages []string) (Advisories, error) {
+	result := Advisories{}
+	if len(packages) == 0 {
+		return result, nil
+	}
+	for _, repo := range s.Repositories {
+		adv, err := repo.GetSecurityAdvisories(ctx, packages)
+		if err != nil {
+			return nil, err
+		}
+		for name, list := range adv {
+			if len(list) == 0 {
+				continue
+			}
+			result[name] = append(result[name], list...)
+		}
+	}
+	return result, nil
+}

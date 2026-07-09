@@ -83,11 +83,55 @@ set := repository.NewSet(
 
 ```go
 results, _ := set.Search(ctx, "logger") // aggregates across the set
-advisories, _ := repo.GetSecurityAdvisories(ctx, []string{"monolog/monolog"})
+
+adv, _ := repo.GetSecurityAdvisories(ctx, []string{"monolog/monolog"})
+// Set also aggregates: set.GetSecurityAdvisories(ctx, names)
 ```
 
 Both are no-ops (empty result, no error) against repositories that do not
 advertise the corresponding endpoint.
+
+`GetSecurityAdvisories` returns an [`Advisories`](https://pkg.go.dev/github.com/shyim/go-composer/repository#Advisories)
+value — the known advisories keyed by package name, unfiltered by version.
+Filter on that result for a concrete install (Composer `audit`-style). Version
+matching is dependency-free: pass a `ConstraintCheck` implemented with whatever
+semver engine you use, e.g. [`github.com/shyim/go-version`](https://github.com/shyim/go-version):
+
+```go
+import "github.com/shyim/go-version"
+
+check := func(constraint, ver string) bool {
+	v, err := version.NewVersion(strings.TrimPrefix(ver, "v"))
+	if err != nil {
+		return false
+	}
+	cs, err := version.NewConstraint(constraint)
+	if err != nil {
+		return false
+	}
+	return cs.Check(v)
+}
+
+// All known advisories for a package:
+for _, a := range adv.Package("monolog/monolog") {
+	log.Println(a.CVE, a.Title)
+}
+
+// Advisories that affect one installed version:
+for _, a := range adv.AffectingPackage("monolog/monolog", "3.0.0", check) {
+	log.Printf("vulnerable: %s (%s)", a.Title, a.CVE)
+}
+
+// Or filter a whole lockfile-style map at once:
+affected := adv.Affecting(map[string]string{
+	"monolog/monolog": "3.0.0",
+	"psr/log":         "3.0.0",
+}, check)
+```
+
+Packagist-style `affectedVersions` strings use `|` (or `||`) between OR branches
+and `,` for AND inside a branch (e.g. `>=6.7.0.0,<6.7.8.1`). `SecurityAdvisory.Affects`
+splits those branches and feeds each one to your `ConstraintCheck`.
 
 ## Authentication
 
