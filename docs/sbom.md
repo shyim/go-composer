@@ -82,9 +82,9 @@ Composer license strings are either SPDX identifiers (`MIT`) or free text
 (`proprietary`). CycloneDX requires the former as `license.id` and the latter
 as `license.name`.
 
-By default (no classifier) every license is emitted as `license.name`, which
-is always valid. To get proper SPDX `id` fields, supply
-`Options.IsSPDXLicenseID` — for example with
+By default every license is emitted as `license.name`, which is always valid
+CycloneDX. To emit recognized SPDX identifiers as `license.id` instead, set
+`Options.SPDX` — for example with
 [`github.com/shyim/go-spdx`](https://github.com/shyim/go-spdx):
 
 ```go
@@ -97,14 +97,14 @@ if err != nil {
 
 bom, err := sbom.Generate(lock, sbom.Options{
 	ApplicationName: "acme/app",
-	IsSPDXLicenseID: func(id string) bool {
-		ok, _ := s.Validate(id)
+	SPDX: func(license string) bool {
+		ok, _ := s.Validate(license)
 		return ok
 	},
 })
 ```
 
-The optional SPDX check keeps this package zero-dependency; SPDX databases are
+`SPDX` is optional so this package stays zero-dependency; SPDX databases are
 large and not every consumer needs them.
 
 ## Options reference
@@ -118,4 +118,4 @@ large and not every consumer needs them.
 | `ToolVersion` | empty | Version for the tool component |
 | `ToolType` | `"application"` | CycloneDX type for the tool |
 | `IncludeDevDependencies` | `false` | Also include `packages-dev` |
-| `IsSPDXLicenseID` | `nil` | Classify a string as SPDX id vs free text |
+| `SPDX` | `nil` | Predicate: true → `license.id`, false → `license.name` |

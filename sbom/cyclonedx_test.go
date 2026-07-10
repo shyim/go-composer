@@ -65,7 +65,7 @@ func TestGenerate(t *testing.T) {
 			ToolGroup:          "acme",
 			ToolVersion:        "test",
 			// Treat only MIT as an SPDX id for this test.
-			IsSPDXLicenseID: func(id string) bool { return id == "MIT" },
+			SPDX: func(id string) bool { return id == "MIT" },
 		})
 		if err != nil {
 			t.Fatal(err)

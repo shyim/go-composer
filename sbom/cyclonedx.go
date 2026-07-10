@@ -85,6 +85,11 @@ type Dependency struct {
 	DependsOn []string `json:"dependsOn,omitempty"`
 }
 
+// SPDX reports whether a Composer license string is a recognized SPDX
+// identifier (or expression). Used by Options.SPDX to choose between
+// CycloneDX license.id and license.name.
+type SPDX func(license string) bool
+
 // Options configures BOM generation.
 type Options struct {
 	// ApplicationName is the name of the root application component (e.g. the
@@ -106,19 +111,20 @@ type Options struct {
 	// "packages-dev" section.
 	IncludeDevDependencies bool
 
-	// IsSPDXLicenseID optionally classifies a license string as a valid SPDX
-	// identifier. When it returns true the value is emitted as license.id;
-	// otherwise as license.name. When nil, every non-empty license is emitted
-	// as license.name (always valid CycloneDX, no SPDX database required).
+	// SPDX optionally decides whether a Composer license string is a recognized
+	// SPDX identifier. When it returns true the value is written as
+	// license.id; otherwise as license.name. When nil, every non-empty license
+	// is written as license.name (always valid CycloneDX, no SPDX database
+	// required).
 	//
-	// Callers that want full SPDX validation can wire in github.com/shyim/go-spdx:
+	// Wire in github.com/shyim/go-spdx when you want real SPDX validation:
 	//
 	//	s, _ := spdx.NewSpdxLicenses()
-	//	opts.IsSPDXLicenseID = func(id string) bool {
-	//	    ok, _ := s.Validate(id)
+	//	opts.SPDX = func(license string) bool {
+	//	    ok, _ := s.Validate(license)
 	//	    return ok
 	//	}
-	IsSPDXLicenseID func(string) bool
+	SPDX SPDX
 }
 
 // Generate builds a CycloneDX BOM from the given Composer lock.
@@ -184,7 +190,7 @@ func Generate(lock *composer.Lock, opts Options) (*BOM, error) {
 	bom.Components = make([]Component, 0, len(packages))
 
 	for _, pkg := range packages {
-		component := componentFromPackage(pkg, opts.IsSPDXLicenseID)
+		component := componentFromPackage(pkg, opts.SPDX)
 		refByName[pkg.Name] = component.BOMRef
 		bom.Components = append(bom.Components, component)
 	}
@@ -199,7 +205,7 @@ func Marshal(bom *BOM) ([]byte, error) {
 	return json.MarshalIndent(bom, "", "  ")
 }
 
-func componentFromPackage(pkg composer.LockPackage, isSPDX func(string) bool) Component {
+func componentFromPackage(pkg composer.LockPackage, isSPDX SPDX) Component {
 	purl := buildPURL(pkg)
 	group, name := splitComposerName(pkg.Name)
 
@@ -293,7 +299,7 @@ func splitComposerName(name string) (group, pkgName string) {
 	return "", name
 }
 
-func licensesFromPackage(licenses []string, isSPDX func(string) bool) []LicenseChoice {
+func licensesFromPackage(licenses []string, isSPDX SPDX) []LicenseChoice {
 	if len(licenses) == 0 {
 		return nil
 	}
