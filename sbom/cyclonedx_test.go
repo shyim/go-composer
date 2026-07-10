@@ -64,8 +64,6 @@ func TestGenerate(t *testing.T) {
 			ToolName:           "my-tool",
 			ToolGroup:          "acme",
 			ToolVersion:        "test",
-			// Treat only MIT as an SPDX id for this test.
-			SPDX: func(id string) bool { return id == "MIT" },
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -271,51 +269,31 @@ func TestSplitComposerName(t *testing.T) {
 }
 
 func TestLicensesFromPackage(t *testing.T) {
-	t.Run("without SPDX classifier emits name", func(t *testing.T) {
-		licenses := licensesFromPackage([]string{"MIT", "proprietary", "  ", "BSD-3-Clause"}, nil)
-		if len(licenses) != 3 {
-			t.Fatalf("expected 3 licenses, got %d", len(licenses))
-		}
-		for _, l := range licenses {
-			if l.License.ID != "" {
-				t.Fatalf("expected empty ID, got %q", l.License.ID)
-			}
-			if l.License.Name == "" {
-				t.Fatal("expected non-empty Name")
-			}
-		}
-	})
+	licenses := licensesFromPackage([]string{"MIT", "proprietary", "  ", "BSD-3-Clause"})
+	if len(licenses) != 3 {
+		t.Fatalf("expected 3 licenses, got %d", len(licenses))
+	}
 
-	t.Run("with SPDX classifier maps ids and free text", func(t *testing.T) {
-		isSPDX := func(id string) bool {
-			return id == "MIT" || id == "BSD-3-Clause"
+	idMatches := map[string]bool{}
+	nameMatches := map[string]bool{}
+	for _, l := range licenses {
+		if l.License.ID != "" {
+			idMatches[l.License.ID] = true
 		}
-		licenses := licensesFromPackage([]string{"MIT", "proprietary", "  ", "BSD-3-Clause"}, isSPDX)
-		if len(licenses) != 3 {
-			t.Fatalf("expected 3 licenses, got %d", len(licenses))
+		if l.License.Name != "" {
+			nameMatches[l.License.Name] = true
 		}
+	}
 
-		idMatches := map[string]bool{}
-		nameMatches := map[string]bool{}
-		for _, l := range licenses {
-			if l.License.ID != "" {
-				idMatches[l.License.ID] = true
-			}
-			if l.License.Name != "" {
-				nameMatches[l.License.Name] = true
-			}
-		}
-
-		if !idMatches["MIT"] {
-			t.Fatal("MIT should be SPDX id")
-		}
-		if !idMatches["BSD-3-Clause"] {
-			t.Fatal("BSD-3-Clause should be SPDX id")
-		}
-		if !nameMatches["proprietary"] {
-			t.Fatal("proprietary should be free-text name")
-		}
-	})
+	if !idMatches["MIT"] {
+		t.Fatal("MIT should be SPDX id")
+	}
+	if !idMatches["BSD-3-Clause"] {
+		t.Fatal("BSD-3-Clause should be SPDX id")
+	}
+	if !nameMatches["proprietary"] {
+		t.Fatal("proprietary should be free-text name")
+	}
 }
 
 func TestCyclonedxType(t *testing.T) {

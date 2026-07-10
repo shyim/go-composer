@@ -1,0 +1,4 @@
+github.com/shyim/go-composer v0.1.0 h1:kWISPyZQZtQIXw6/ZACYNGAvmNLC+lCLXNIql0qq1Zg=
+github.com/shyim/go-composer v0.1.0/go.mod h1:2hiry74gTUikbZkuaTJd01tWs1qoJNZQ/zjXduAVnbA=
+github.com/shyim/go-spdx v0.0.0-20260602055701-a935a2772ac1 h1:oD4MMCeWHSuvvLv2iXOKVMZRvJyn+r3xwIMU2BFttDo=
+github.com/shyim/go-spdx v0.0.0-20260602055701-a935a2772ac1/go.mod h1:G8YfjnnIrntUnXjmOlbkLn9HuEA5if+XvxIxuWq7tUg=

@@ -4,8 +4,10 @@
 
 The `sbom` package is its own Go module (`github.com/shyim/go-composer/sbom`)
 and turns a parsed `composer.lock` into a [CycloneDX](https://cyclonedx.org/)
-1.7 JSON Software Bill of Materials. Its only dependency is
-`github.com/shyim/go-composer` (stdlib lock types); install with:
+1.7 JSON Software Bill of Materials. It depends on the parent
+`github.com/shyim/go-composer` lock types and
+[`github.com/shyim/go-spdx`](https://github.com/shyim/go-spdx) for license
+classification; install with:
 
 ```sh
 go get github.com/shyim/go-composer/sbom@sbom/vX.Y.Z
@@ -16,6 +18,9 @@ used automatically while developing. Consumers do not need `go.work` — after
 the first root release they resolve a real versioned require (for example
 `github.com/shyim/go-composer v0.1.0`). Nested releases use directory-prefixed
 tags: `sbom/v0.1.0` for this module, `v0.1.0` for the root.
+
+Unlike the root module, `sbom` depends on `github.com/shyim/go-spdx` for license
+classification (plus the parent lock types).
 
 ## Quick start
 
@@ -82,30 +87,10 @@ Composer license strings are either SPDX identifiers (`MIT`) or free text
 (`proprietary`). CycloneDX requires the former as `license.id` and the latter
 as `license.name`.
 
-By default every license is emitted as `license.name`, which is always valid
-CycloneDX. To emit recognized SPDX identifiers as `license.id` instead, set
-`Options.SPDX` — for example with
-[`github.com/shyim/go-spdx`](https://github.com/shyim/go-spdx):
-
-```go
-import "github.com/shyim/go-spdx"
-
-s, err := spdx.NewSpdxLicenses()
-if err != nil {
-	log.Fatal(err)
-}
-
-bom, err := sbom.Generate(lock, sbom.Options{
-	ApplicationName: "acme/app",
-	SPDX: func(license string) bool {
-		ok, _ := s.Validate(license)
-		return ok
-	},
-})
-```
-
-`SPDX` is optional so this package stays zero-dependency; SPDX databases are
-large and not every consumer needs them.
+This package classifies licenses with
+[`github.com/shyim/go-spdx`](https://github.com/shyim/go-spdx): recognized SPDX
+identifiers become `license.id`, everything else becomes `license.name`. That
+is why `sbom` is a separate module from the zero-dependency root package.
 
 ## Options reference
 
@@ -118,4 +103,3 @@ large and not every consumer needs them.
 | `ToolVersion` | empty | Version for the tool component |
 | `ToolType` | `"application"` | CycloneDX type for the tool |
 | `IncludeDevDependencies` | `false` | Also include `packages-dev` |
-| `SPDX` | `nil` | Predicate: true → `license.id`, false → `license.name` |

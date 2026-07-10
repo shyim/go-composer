@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/shyim/go-composer"
+	"github.com/shyim/go-spdx"
 )
 
 const (
@@ -85,11 +87,6 @@ type Dependency struct {
 	DependsOn []string `json:"dependsOn,omitempty"`
 }
 
-// SPDX reports whether a Composer license string is a recognized SPDX
-// identifier (or expression). Used by Options.SPDX to choose between
-// CycloneDX license.id and license.name.
-type SPDX func(license string) bool
-
 // Options configures BOM generation.
 type Options struct {
 	// ApplicationName is the name of the root application component (e.g. the
@@ -110,21 +107,6 @@ type Options struct {
 	// IncludeDevDependencies includes packages from the composer.lock
 	// "packages-dev" section.
 	IncludeDevDependencies bool
-
-	// SPDX optionally decides whether a Composer license string is a recognized
-	// SPDX identifier. When it returns true the value is written as
-	// license.id; otherwise as license.name. When nil, every non-empty license
-	// is written as license.name (always valid CycloneDX, no SPDX database
-	// required).
-	//
-	// Wire in github.com/shyim/go-spdx when you want real SPDX validation:
-	//
-	//	s, _ := spdx.NewSpdxLicenses()
-	//	opts.SPDX = func(license string) bool {
-	//	    ok, _ := s.Validate(license)
-	//	    return ok
-	//	}
-	SPDX SPDX
 }
 
 // Generate builds a CycloneDX BOM from the given Composer lock.
@@ -190,7 +172,7 @@ func Generate(lock *composer.Lock, opts Options) (*BOM, error) {
 	bom.Components = make([]Component, 0, len(packages))
 
 	for _, pkg := range packages {
-		component := componentFromPackage(pkg, opts.SPDX)
+		component := componentFromPackage(pkg)
 		refByName[pkg.Name] = component.BOMRef
 		bom.Components = append(bom.Components, component)
 	}
@@ -205,7 +187,7 @@ func Marshal(bom *BOM) ([]byte, error) {
 	return json.MarshalIndent(bom, "", "  ")
 }
 
-func componentFromPackage(pkg composer.LockPackage, isSPDX SPDX) Component {
+func componentFromPackage(pkg composer.LockPackage) Component {
 	purl := buildPURL(pkg)
 	group, name := splitComposerName(pkg.Name)
 
@@ -217,7 +199,7 @@ func componentFromPackage(pkg composer.LockPackage, isSPDX SPDX) Component {
 		Version:     pkg.Version,
 		Description: pkg.Description,
 		PURL:        purl,
-		Licenses:    licensesFromPackage(pkg.License, isSPDX),
+		Licenses:    licensesFromPackage(pkg.License),
 	}
 
 	if pkg.Dist.Shasum != "" {
@@ -299,7 +281,7 @@ func splitComposerName(name string) (group, pkgName string) {
 	return "", name
 }
 
-func licensesFromPackage(licenses []string, isSPDX SPDX) []LicenseChoice {
+func licensesFromPackage(licenses []string) []LicenseChoice {
 	if len(licenses) == 0 {
 		return nil
 	}
@@ -310,13 +292,35 @@ func licensesFromPackage(licenses []string, isSPDX SPDX) []LicenseChoice {
 		if license == "" {
 			continue
 		}
-		if isSPDX != nil && isSPDX(license) {
+		if isSPDXLicenseID(license) {
 			out = append(out, LicenseChoice{License: License{ID: license}})
 		} else {
 			out = append(out, LicenseChoice{License: License{Name: license}})
 		}
 	}
 	return out
+}
+
+var (
+	spdxOnce     sync.Once
+	spdxLicenses *spdx.SpdxLicenses
+)
+
+// isSPDXLicenseID reports whether license is a valid SPDX identifier/expression
+// according to github.com/shyim/go-spdx. On database load failure it returns
+// false so free-text license.name is used (still valid CycloneDX).
+func isSPDXLicenseID(license string) bool {
+	spdxOnce.Do(func() {
+		s, err := spdx.NewSpdxLicenses()
+		if err == nil {
+			spdxLicenses = s
+		}
+	})
+	if spdxLicenses == nil {
+		return false
+	}
+	ok, _ := spdxLicenses.Validate(license)
+	return ok
 }
 
 // cyclonedxType maps a composer package type to a CycloneDX component type.
