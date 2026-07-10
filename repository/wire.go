@@ -1,7 +1,9 @@
 package repository
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"strings"
 )
 
@@ -12,14 +14,73 @@ import (
 // The presence of MetadataURL (the "metadata-url" key, a template containing
 // "%package%") marks a V2 protocol repository.
 type RootFile struct {
-	MetadataURL              string                     `json:"metadata-url,omitempty"`
-	AvailablePackages        []string                   `json:"available-packages,omitempty"`
-	AvailablePackagePatterns []string                   `json:"available-package-patterns,omitempty"`
-	SearchURL                string                     `json:"search,omitempty"`
-	ListURL                  string                     `json:"list,omitempty"`
-	NotifyBatch              string                     `json:"notify-batch,omitempty"`
-	Packages                 map[string]json.RawMessage `json:"packages,omitempty"`
-	SecurityAdvisories       *SecurityAdvisoriesConfig  `json:"security-advisories,omitempty"`
+	MetadataURL              string                    `json:"metadata-url,omitempty"`
+	AvailablePackages        []string                  `json:"available-packages,omitempty"`
+	AvailablePackagePatterns []string                  `json:"available-package-patterns,omitempty"`
+	SearchURL                string                    `json:"search,omitempty"`
+	ListURL                  string                    `json:"list,omitempty"`
+	NotifyBatch              string                    `json:"notify-batch,omitempty"`
+	Packages                 InlinePackages            `json:"packages,omitempty"`
+	SecurityAdvisories       *SecurityAdvisoriesConfig `json:"security-advisories,omitempty"`
+}
+
+// InlinePackages is the root packages.json "packages" object: a map of package
+// name → raw version list/object. Packagist.org (and some other V2 roots) emit
+// an empty JSON array "[]" here as a V1 compatibility stub; that is treated as
+// no inline catalog (nil map), not a parse error.
+type InlinePackages map[string]json.RawMessage
+
+// UnmarshalJSON accepts either a JSON object (the real catalog) or an empty
+// JSON array (legacy / V1 stub). A non-empty array is rejected.
+func (p *InlinePackages) UnmarshalJSON(data []byte) error {
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 || bytes.Equal(data, []byte("null")) {
+		*p = nil
+		return nil
+	}
+	switch data[0] {
+	case '{':
+		var m map[string]json.RawMessage
+		if err := json.Unmarshal(data, &m); err != nil {
+			return err
+		}
+		// Distinguish omitted/null (nil) from an explicit empty object.
+		if m == nil {
+			m = map[string]json.RawMessage{}
+		}
+		*p = InlinePackages(m)
+		return nil
+	case '[':
+		var arr []json.RawMessage
+		if err := json.Unmarshal(data, &arr); err != nil {
+			return err
+		}
+		if len(arr) != 0 {
+			return fmt.Errorf("packages: expected object or empty array, got array of length %d", len(arr))
+		}
+		// Empty array means "no inline packages" — leave as nil so listing
+		// correctly reports ErrListingNotSupported for lazy V2 repos.
+		*p = nil
+		return nil
+	default:
+		return fmt.Errorf("packages: expected object or empty array, got %s", summarizeJSONKind(data))
+	}
+}
+
+func summarizeJSONKind(data []byte) string {
+	if len(data) == 0 {
+		return "empty"
+	}
+	switch data[0] {
+	case '"':
+		return "string"
+	case 't', 'f':
+		return "boolean"
+	case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-':
+		return "number"
+	default:
+		return string(data[0])
+	}
 }
 
 // SecurityAdvisoriesConfig is the "security-advisories" section of a RootFile.

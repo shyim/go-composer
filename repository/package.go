@@ -140,7 +140,7 @@ func (c *Client) fetchPackageFile(ctx context.Context, metadataURL, fileName, pa
 }
 
 // lookupInlinePackage finds packages[name] with a case-insensitive key match.
-func lookupInlinePackage(packages map[string]json.RawMessage, name string) (json.RawMessage, bool) {
+func lookupInlinePackage(packages InlinePackages, name string) (json.RawMessage, bool) {
 	if packages == nil {
 		return nil, false
 	}
