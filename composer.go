@@ -506,6 +506,10 @@ func (c *Json) HasConfig(key string) bool {
 // EnableComposerPlugin marks the given plugin as allowed under
 // config.allow-plugins.
 func (c *Json) EnableComposerPlugin(name string) {
+	if c.Config == nil {
+		c.Config = map[string]any{}
+	}
+
 	allowedPlugins, ok := c.Config["allow-plugins"].(map[string]any)
 
 	if !ok {
@@ -513,6 +517,24 @@ func (c *Json) EnableComposerPlugin(name string) {
 	}
 
 	allowedPlugins[name] = true
+
+	c.Config["allow-plugins"] = allowedPlugins
+}
+
+// DisableComposerPlugin marks the given plugin as disallowed under
+// config.allow-plugins.
+func (c *Json) DisableComposerPlugin(name string) {
+	if c.Config == nil {
+		c.Config = map[string]any{}
+	}
+
+	allowedPlugins, ok := c.Config["allow-plugins"].(map[string]any)
+
+	if !ok {
+		allowedPlugins = map[string]any{}
+	}
+
+	allowedPlugins[name] = false
 
 	c.Config["allow-plugins"] = allowedPlugins
 }
