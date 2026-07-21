@@ -515,6 +515,48 @@ func TestComposerJsonManipulationVerbs(t *testing.T) {
 	testassert.False(t, c.HasConfig("sort-packages"))
 }
 
+func TestComposerJsonComposerPluginVerbs(t *testing.T) {
+	c := &Json{}
+
+	// EnableComposerPlugin creates the allow-plugins map when missing.
+	c.EnableComposerPlugin("phpstan/extension-installer")
+	allowedPlugins, ok := c.Config["allow-plugins"].(map[string]any)
+	testassert.True(t, ok)
+	testassert.Equal(t, true, allowedPlugins["phpstan/extension-installer"])
+
+	// EnableComposerPlugin keeps existing entries and appends.
+	c.EnableComposerPlugin("dealerdirect/phpstan/plugin")
+	allowedPlugins = c.Config["allow-plugins"].(map[string]any)
+	testassert.Equal(t, true, allowedPlugins["phpstan/extension-installer"])
+	testassert.Equal(t, true, allowedPlugins["dealerdirect/phpstan/plugin"])
+
+	// DisableComposerPlugin marks an enabled plugin as disallowed.
+	c.DisableComposerPlugin("phpstan/extension-installer")
+	allowedPlugins = c.Config["allow-plugins"].(map[string]any)
+	testassert.Equal(t, false, allowedPlugins["phpstan/extension-installer"])
+	// Other entries are untouched.
+	testassert.Equal(t, true, allowedPlugins["dealerdirect/phpstan/plugin"])
+
+	// DisableComposerPlugin creates the allow-plugins map when missing.
+	c2 := &Json{}
+	c2.DisableComposerPlugin("phpstan/extension-installer")
+	allowedPlugins, ok = c2.Config["allow-plugins"].(map[string]any)
+	testassert.True(t, ok)
+	testassert.Equal(t, false, allowedPlugins["phpstan/extension-installer"])
+
+	// Re-enabling a disabled plugin flips it back to true.
+	c.DisableComposerPlugin("dealerdirect/phpstan/plugin")
+	c.EnableComposerPlugin("dealerdirect/phpstan/plugin")
+	allowedPlugins = c.Config["allow-plugins"].(map[string]any)
+	testassert.Equal(t, true, allowedPlugins["dealerdirect/phpstan/plugin"])
+
+	// RemoveComposerPlugin deletes the entry entirely.
+	c.RemoveComposerPlugin("phpstan/extension-installer")
+	allowedPlugins = c.Config["allow-plugins"].(map[string]any)
+	_, ok = allowedPlugins["phpstan/extension-installer"]
+	testassert.False(t, ok)
+}
+
 func TestComposerJsonPreservesKeyOrder(t *testing.T) {
 	t.Run("top-level order preserved across round-trip", func(t *testing.T) {
 		input := `{"type":"library","name":"a/b","require":{"php":"^8.2"},"description":"x"}`
