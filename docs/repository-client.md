@@ -120,6 +120,22 @@ set := repository.NewSet(
 > represented by the repositories parser. Pass `includePackagist=false` to
 > `FromComposer` if you need to honor it.
 
+You can inspect registered repositories or add additional ones dynamically:
+
+```go
+// Check if a repository URL is already registered
+if !set.HasRepository("https://repo.example.com") {
+    // Add only if missing
+    set.AddRepository(repository.New("https://repo.example.com", auth))
+}
+
+// Or append repository clients unconditionally
+set.Add(repository.New("https://other.example.com", auth))
+
+// List all registered repository base URLs
+urls := set.URLs()
+```
+
 ## Search and security advisories
 
 ```go
