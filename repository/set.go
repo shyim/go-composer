@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/shyim/go-composer"
 )
@@ -21,6 +22,64 @@ type Set struct {
 // NewSet builds a set from the given repositories, queried in order.
 func NewSet(repos ...*Client) *Set {
 	return &Set{Repositories: repos}
+}
+
+// Add appends the given repository clients to the set.
+func (s *Set) Add(repos ...*Client) {
+	for _, repo := range repos {
+		if repo != nil {
+			s.Repositories = append(s.Repositories, repo)
+		}
+	}
+}
+
+// AddRepository appends a repository client to the set unless a repository
+// with the same URL is already registered.
+func (s *Set) AddRepository(repo *Client) {
+	if repo == nil || s.HasRepository(repo.URL()) {
+		return
+	}
+	s.Repositories = append(s.Repositories, repo)
+}
+
+// HasRepository reports whether a repository with the given URL is registered
+// in the set.
+func (s *Set) HasRepository(rawURL string) bool {
+	if rawURL == "" {
+		return false
+	}
+	target := strings.TrimRight(rawURL, "/")
+	targetIsPackagist := isPackagistURL(rawURL)
+
+	for _, repo := range s.Repositories {
+		if repo == nil {
+			continue
+		}
+		repoURL := strings.TrimRight(repo.URL(), "/")
+		if strings.EqualFold(repoURL, target) {
+			return true
+		}
+		if targetIsPackagist && isPackagistURL(repo.URL()) {
+			return true
+		}
+	}
+	return false
+}
+
+// Has is an alias for HasRepository.
+func (s *Set) Has(rawURL string) bool {
+	return s.HasRepository(rawURL)
+}
+
+// URLs returns the canonical base URLs of all registered repositories in order.
+func (s *Set) URLs() []string {
+	urls := make([]string, 0, len(s.Repositories))
+	for _, repo := range s.Repositories {
+		if repo != nil {
+			urls = append(urls, repo.URL())
+		}
+	}
+	return urls
 }
 
 // FromComposer builds a set from the "repositories" declared in a parsed

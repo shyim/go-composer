@@ -111,3 +111,40 @@ func TestSetSearchAggregates(t *testing.T) {
 	testassert.Equal(t, "a/one", results[0].Name)
 	testassert.Equal(t, "b/two", results[1].Name)
 }
+
+func TestSetHasRepositoryAndURLs(t *testing.T) {
+	set := NewSet(
+		New("https://repo.example.com", nil),
+		New("https://repo.packagist.org", nil),
+	)
+
+	testassert.True(t, set.HasRepository("https://repo.example.com"))
+	testassert.True(t, set.HasRepository("https://repo.example.com/"))
+	testassert.True(t, set.Has("https://packagist.org"))
+	testassert.True(t, set.Has("https://repo.packagist.org/"))
+	testassert.False(t, set.HasRepository("https://unknown.example.com"))
+
+	urls := set.URLs()
+	testassert.RequireLen(t, urls, 2)
+	testassert.Equal(t, "https://repo.example.com", urls[0])
+	testassert.Equal(t, "https://repo.packagist.org", urls[1])
+}
+
+func TestSetAddAndAddRepository(t *testing.T) {
+	set := NewSet(New("https://repo.example.com", nil))
+
+	// AddRepository does not add duplicate
+	set.AddRepository(New("https://repo.example.com/", nil))
+	testassert.RequireLen(t, set.Repositories, 1)
+
+	// AddRepository adds new repo if missing
+	set.AddRepository(New("https://new.example.com", nil))
+	testassert.RequireLen(t, set.Repositories, 2)
+	testassert.True(t, set.HasRepository("https://new.example.com"))
+
+	// Add appends unconditionally
+	set.Add(New("https://forced.example.com", nil))
+	testassert.RequireLen(t, set.Repositories, 3)
+	testassert.True(t, set.HasRepository("https://forced.example.com"))
+}
+
