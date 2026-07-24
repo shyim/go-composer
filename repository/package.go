@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -37,6 +38,42 @@ type Version struct {
 	Dist              composer.LockPackageDist   `json:"dist,omitempty"`
 	Source            composer.LockPackageSource `json:"source,omitempty"`
 	Extra             composer.ExtraData         `json:"extra,omitempty"`
+}
+
+// UnmarshalJSON decodes a version object, tolerating PHP-style empty arrays.
+// PHP-based repositories (packages.shopware.com, Satis) serialize empty
+// associative arrays as [] instead of {}, so object-typed fields such as
+// autoload, require or extra arrive as arrays when they are empty. An empty
+// array carries no data either way, so it is treated like an absent key —
+// matching Composer, which decodes JSON into PHP arrays and cannot tell the
+// two forms apart.
+func (v *Version) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+
+	trimmed := false
+	for key, raw := range fields {
+		if string(bytes.TrimSpace(raw)) == "[]" {
+			delete(fields, key)
+			trimmed = true
+		}
+	}
+	if trimmed {
+		var err error
+		if data, err = json.Marshal(fields); err != nil {
+			return err
+		}
+	}
+
+	type plain Version
+	var decoded plain
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	*v = Version(decoded)
+	return nil
 }
 
 // Package is the full set of versions a repository knows for a package.

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"github.com/shyim/go-composer/internal/testassert"
 	"net/http"
 	"testing"
@@ -233,4 +234,45 @@ func TestDecodePackageVersionsArrayStillWorks(t *testing.T) {
 	testassert.RequireNoError(t, err)
 	testassert.RequireLen(t, versions, 2)
 	testassert.Equal(t, "1.0.0", versions[0].Version)
+}
+
+func TestDecodePackageVersionsPHPEmptyArrays(t *testing.T) {
+	// Trimmed real-world version object from packages.shopware.com: PHP
+	// serializes empty associative arrays as [], so object-typed fields like
+	// autoload, require and extra arrive as arrays when empty.
+	raw := []byte(`{"1.2.6":{
+		"version":"1.2.6",
+		"type":"shopware-app",
+		"autoload":[],
+		"autoload-dev":[],
+		"description":null,
+		"require":[],
+		"authors":[{"name":"Luigi's Box"}],
+		"extra":[],
+		"dist":{"url":"https://packages.shopware.com/download","type":"zip"},
+		"name":"store.shopware.com/xxx21luigisboxextension"
+	}}`)
+
+	versions, err := DecodePackageVersions(raw, false)
+	testassert.RequireNoError(t, err)
+	testassert.RequireLen(t, versions, 1)
+
+	v := versions[0]
+	testassert.Equal(t, "store.shopware.com/xxx21luigisboxextension", v.Name)
+	testassert.Equal(t, "1.2.6", v.Version)
+	testassert.Nil(t, v.Autoload)
+	testassert.Nil(t, v.Require)
+	testassert.Nil(t, v.Extra)
+	testassert.RequireLen(t, v.Authors, 1)
+	testassert.Equal(t, "zip", v.Dist.Type)
+}
+
+func TestVersionUnmarshalNonEmptyObjectFieldsStillDecode(t *testing.T) {
+	raw := []byte(`{"name":"a/b","version":"1.0.0","require":{"php":">=8.1"},"autoload":{"psr-4":{"A\\":"src/"}}}`)
+
+	var v Version
+	testassert.RequireNoError(t, json.Unmarshal(raw, &v))
+	testassert.Equal(t, ">=8.1", v.Require["php"])
+	testassert.RequireNotNil(t, v.Autoload)
+	testassert.Equal(t, "src/", v.Autoload.Psr4["A\\"])
 }
