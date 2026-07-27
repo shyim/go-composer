@@ -276,3 +276,42 @@ func TestVersionUnmarshalNonEmptyObjectFieldsStillDecode(t *testing.T) {
 	testassert.RequireNotNil(t, v.Autoload)
 	testassert.Equal(t, "src/", v.Autoload.Psr4["A\\"])
 }
+
+func TestGetPackageDevFetchError(t *testing.T) {
+	repo, _ := newTestRepo(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/packages.json":
+			_, _ = w.Write([]byte(`{"metadata-url":"/p2/%package%.json"}`))
+		case "/p2/acme/lib.json":
+			_, _ = w.Write([]byte(`{"packages":{"acme/lib":[{"name":"acme/lib","version":"1.0.0"}]}}`))
+		case "/p2/acme/lib~dev.json":
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+		default:
+			http.NotFound(w, r)
+		}
+	}, nil)
+
+	_, err := repo.GetPackage(context.Background(), "acme/lib")
+	testassert.Error(t, err)
+}
+
+func TestGetPackageDevNotFound(t *testing.T) {
+	repo, _ := newTestRepo(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/packages.json":
+			_, _ = w.Write([]byte(`{"metadata-url":"/p2/%package%.json"}`))
+		case "/p2/acme/lib.json":
+			_, _ = w.Write([]byte(`{"packages":{"acme/lib":[{"name":"acme/lib","version":"1.0.0"}]}}`))
+		case "/p2/acme/lib~dev.json":
+			http.NotFound(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	}, nil)
+
+	meta, err := repo.GetPackage(context.Background(), "acme/lib")
+	testassert.RequireNoError(t, err)
+	testassert.RequireLen(t, meta.Versions, 1)
+	testassert.Equal(t, "1.0.0", meta.Versions[0].Version)
+}
+

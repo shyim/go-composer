@@ -3,6 +3,7 @@ package repository
 import (
 	"bytes"
 	"encoding/json"
+	"sort"
 )
 
 // minifiedComposer2 is the value of a Metadata document's "minified" key that
@@ -32,6 +33,12 @@ func DecodePackageVersions(raw json.RawMessage, minified bool) ([]Version, error
 
 	// Prefer the array form used by V2 metadata.
 	if raw[0] == '[' {
+		if !minified {
+			var versions []Version
+			if err := json.Unmarshal(raw, &versions); err == nil {
+				return versions, nil
+			}
+		}
 		var rawVersions []map[string]json.RawMessage
 		if err := json.Unmarshal(raw, &rawVersions); err != nil {
 			return nil, err
@@ -48,8 +55,15 @@ func DecodePackageVersions(raw json.RawMessage, minified bool) ([]Version, error
 		if err := json.Unmarshal(raw, &byVersion); err != nil {
 			return nil, err
 		}
+		keys := make([]string, 0, len(byVersion))
+		for k := range byVersion {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+
 		rawVersions := make([]map[string]json.RawMessage, 0, len(byVersion))
-		for ver, obj := range byVersion {
+		for _, ver := range keys {
+			obj := byVersion[ver]
 			if obj == nil {
 				obj = map[string]json.RawMessage{}
 			}
@@ -70,17 +84,26 @@ func DecodePackageVersions(raw json.RawMessage, minified bool) ([]Version, error
 }
 
 func decodeVersionMaps(rawVersions []map[string]json.RawMessage) ([]Version, error) {
-	versions := make([]Version, 0, len(rawVersions))
-	for _, rv := range rawVersions {
-		obj, err := json.Marshal(rv)
+	if len(rawVersions) == 0 {
+		return nil, nil
+	}
+	var buf bytes.Buffer
+	buf.WriteByte('[')
+	for i, rv := range rawVersions {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		b, err := json.Marshal(rv)
 		if err != nil {
 			return nil, err
 		}
-		var v Version
-		if err := json.Unmarshal(obj, &v); err != nil {
-			return nil, err
-		}
-		versions = append(versions, v)
+		buf.Write(b)
+	}
+	buf.WriteByte(']')
+
+	var versions []Version
+	if err := json.Unmarshal(buf.Bytes(), &versions); err != nil {
+		return nil, err
 	}
 	return versions, nil
 }
@@ -191,11 +214,7 @@ func minifyRaw(versions []map[string]json.RawMessage) []map[string]json.RawMessa
 
 // isUnsetSentinel reports whether a raw JSON value is the string "__unset".
 func isUnsetSentinel(raw json.RawMessage) bool {
-	var s string
-	if err := json.Unmarshal(raw, &s); err != nil {
-		return false
-	}
-	return s == metadataUnset
+	return bytes.Equal(bytes.TrimSpace(raw), []byte(`"`+metadataUnset+`"`))
 }
 
 func cloneRawMap(m map[string]json.RawMessage) map[string]json.RawMessage {

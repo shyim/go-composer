@@ -1,6 +1,10 @@
 package composer
 
-import "strings"
+import (
+	"encoding/json"
+	"math"
+	"strings"
+)
 
 // ExtraData is the parsed "extra" section of a composer.json. It is a plain
 // map[string]any, so existing map indexing (e.g. data["key"]) keeps working,
@@ -82,8 +86,18 @@ func (e ExtraData) GetInt(path string) (int64, bool) {
 	case int64:
 		return n, true
 	case float64:
-		if n == float64(int64(n)) {
+		if n >= -(1<<53) && n <= (1<<53) && n == math.Trunc(n) {
 			return int64(n), true
+		}
+		return 0, false
+	case json.Number:
+		if i, err := n.Int64(); err == nil {
+			return i, true
+		}
+		if f, err := n.Float64(); err == nil {
+			if f >= -(1<<53) && f <= (1<<53) && f == math.Trunc(f) {
+				return int64(f), true
+			}
 		}
 		return 0, false
 	default:
@@ -105,6 +119,11 @@ func (e ExtraData) GetFloat(path string) (float64, bool) {
 		return float64(n), true
 	case int64:
 		return float64(n), true
+	case json.Number:
+		if f, err := n.Float64(); err == nil {
+			return f, true
+		}
+		return 0, false
 	default:
 		return 0, false
 	}
@@ -154,6 +173,9 @@ func (e ExtraData) GetStringSlice(path string) ([]string, bool) {
 // needed. An intermediate segment that exists but is not an object is replaced
 // with a new object. Setting an empty path is a no-op.
 func (e ExtraData) Set(path string, value any) {
+	if e == nil {
+		return
+	}
 	segments := splitPath(path)
 	if len(segments) == 0 {
 		return

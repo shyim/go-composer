@@ -124,6 +124,10 @@ func NotEmpty(t *testing.T, object any, msgAndArgs ...any) {
 }
 
 func isEmpty(object any) bool {
+	return isEmptyDepth(object, nil)
+}
+
+func isEmptyDepth(object any, visited map[uintptr]bool) bool {
 	if object == nil {
 		return true
 	}
@@ -135,7 +139,21 @@ func isEmpty(object any) bool {
 		if v.IsNil() {
 			return true
 		}
-		return isEmpty(v.Elem().Interface())
+		if v.Kind() == reflect.Ptr {
+			ptr := v.Pointer()
+			if visited != nil && visited[ptr] {
+				return false
+			}
+			if visited == nil {
+				visited = make(map[uintptr]bool)
+			}
+			visited[ptr] = true
+		}
+		elem := v.Elem()
+		if !elem.IsValid() {
+			return true
+		}
+		return isEmptyDepth(elem.Interface(), visited)
 	default:
 		zero := reflect.Zero(v.Type())
 		return reflect.DeepEqual(object, zero.Interface())
@@ -231,7 +249,14 @@ func contains(container, item any) bool {
 		}
 		return false
 	case reflect.Map:
-		return cv.MapIndex(reflect.ValueOf(item)).IsValid()
+		if item == nil {
+			return false
+		}
+		iv := reflect.ValueOf(item)
+		if !iv.Type().AssignableTo(cv.Type().Key()) || !iv.Type().Comparable() {
+			return false
+		}
+		return cv.MapIndex(iv).IsValid()
 	default:
 		return false
 	}
@@ -290,16 +315,35 @@ func ElementsMatch(t *testing.T, expected, actual any, msgAndArgs ...any) {
 	}
 }
 
+func isPointerKind(k reflect.Kind) bool {
+	switch k {
+	case reflect.Chan, reflect.Func, reflect.Map, reflect.Ptr, reflect.UnsafePointer, reflect.Slice:
+		return true
+	default:
+		return false
+	}
+}
+
 func Same(t *testing.T, expected, actual any, msgAndArgs ...any) {
 	t.Helper()
-	if reflect.ValueOf(expected).Pointer() != reflect.ValueOf(actual).Pointer() {
+	ve, va := reflect.ValueOf(expected), reflect.ValueOf(actual)
+	if !ve.IsValid() || !va.IsValid() || !isPointerKind(ve.Kind()) || !isPointerKind(va.Kind()) {
+		fail(t, false, fmt.Sprintf("cannot compare pointer of types %T and %T%s", expected, actual, formatMsg(msgAndArgs...)))
+		return
+	}
+	if ve.Pointer() != va.Pointer() {
 		fail(t, false, fmt.Sprintf("not same pointer:\nexpected: %p\nactual:   %p%s", expected, actual, formatMsg(msgAndArgs...)))
 	}
 }
 
 func Zero(t *testing.T, value any, msgAndArgs ...any) {
 	t.Helper()
-	if !isEmpty(value) {
+	if value == nil {
+		return
+	}
+	v := reflect.ValueOf(value)
+	zero := reflect.Zero(v.Type()).Interface()
+	if !reflect.DeepEqual(value, zero) {
 		fail(t, false, fmt.Sprintf("expected zero value, got %#v%s", value, formatMsg(msgAndArgs...)))
 	}
 }

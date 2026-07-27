@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"net/url"
 	"strings"
 
 	"github.com/shyim/go-composer"
@@ -96,14 +97,16 @@ func FromComposer(c *composer.Json, auth *composer.Auth, includePackagist bool) 
 	set := &Set{}
 	hasPackagist := false
 
-	for _, repo := range c.Repositories {
-		if repo.Type != "composer" || repo.URL == "" {
-			continue
+	if c != nil {
+		for _, repo := range c.Repositories {
+			if repo.Type != "composer" || repo.URL == "" {
+				continue
+			}
+			if isPackagistURL(repo.URL) {
+				hasPackagist = true
+			}
+			set.Repositories = append(set.Repositories, New(repo.URL, auth))
 		}
-		if isPackagistURL(repo.URL) {
-			hasPackagist = true
-		}
-		set.Repositories = append(set.Repositories, New(repo.URL, auth))
 	}
 
 	if includePackagist && !hasPackagist {
@@ -114,13 +117,12 @@ func FromComposer(c *composer.Json, auth *composer.Auth, includePackagist bool) 
 }
 
 func isPackagistURL(rawURL string) bool {
-	for _, host := range []string{"repo.packagist.org", "packagist.org"} {
-		if rawURL == "https://"+host || rawURL == "http://"+host ||
-			rawURL == "https://"+host+"/" || rawURL == "http://"+host+"/" {
-			return true
-		}
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
 	}
-	return false
+	host := strings.ToLower(u.Hostname())
+	return host == "repo.packagist.org" || host == "packagist.org"
 }
 
 // GetPackage queries each repository in order and returns the first match,

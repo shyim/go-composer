@@ -186,8 +186,14 @@ func (e *Repositories) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &asMap); err == nil {
 		*e = Repositories{}
 
-		for _, v := range asMap {
-			*e = append(*e, v)
+		keys := make([]string, 0, len(asMap))
+		for k := range asMap {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+
+		for _, k := range keys {
+			*e = append(*e, asMap[k])
 		}
 
 		return nil
@@ -207,6 +213,10 @@ func (e *Repositories) UnmarshalJSON(data []byte) error {
 
 // HasRepository reports whether a repository with the given URL is configured.
 func (r *Repositories) HasRepository(url string) bool {
+	if r == nil {
+		return false
+	}
+
 	for _, repository := range *r {
 		if repository.URL == url {
 			return true
@@ -510,14 +520,20 @@ func (c *Json) EnableComposerPlugin(name string) {
 		c.Config = map[string]any{}
 	}
 
-	allowedPlugins, ok := c.Config["allow-plugins"].(map[string]any)
+	if b, ok := c.Config["allow-plugins"].(bool); ok {
+		if b {
+			return
+		}
+		c.Config["allow-plugins"] = map[string]any{name: true}
+		return
+	}
 
+	allowedPlugins, ok := toStringMap(c.Config["allow-plugins"])
 	if !ok {
 		allowedPlugins = map[string]any{}
 	}
 
 	allowedPlugins[name] = true
-
 	c.Config["allow-plugins"] = allowedPlugins
 }
 
@@ -528,27 +544,35 @@ func (c *Json) DisableComposerPlugin(name string) {
 		c.Config = map[string]any{}
 	}
 
-	allowedPlugins, ok := c.Config["allow-plugins"].(map[string]any)
+	if b, ok := c.Config["allow-plugins"].(bool); ok {
+		if !b {
+			return
+		}
+		c.Config["allow-plugins"] = map[string]any{name: false}
+		return
+	}
 
+	allowedPlugins, ok := toStringMap(c.Config["allow-plugins"])
 	if !ok {
 		allowedPlugins = map[string]any{}
 	}
 
 	allowedPlugins[name] = false
-
 	c.Config["allow-plugins"] = allowedPlugins
 }
 
 // RemoveComposerPlugin removes the given plugin from config.allow-plugins.
 func (c *Json) RemoveComposerPlugin(name string) {
-	allowedPlugins, ok := c.Config["allow-plugins"].(map[string]any)
+	if c.Config == nil {
+		return
+	}
 
+	allowedPlugins, ok := toStringMap(c.Config["allow-plugins"])
 	if !ok {
 		return
 	}
 
 	delete(allowedPlugins, name)
-
 	c.Config["allow-plugins"] = allowedPlugins
 }
 
@@ -611,7 +635,10 @@ func (c *Json) AddRepository(repo Repository) {
 
 // RemoveRepository removes every repository whose URL matches the given value.
 func (c *Json) RemoveRepository(url string) {
-	filtered := c.Repositories[:0]
+	if len(c.Repositories) == 0 {
+		return
+	}
+	filtered := make(Repositories, 0, len(c.Repositories))
 	for _, repo := range c.Repositories {
 		if repo.URL != url {
 			filtered = append(filtered, repo)

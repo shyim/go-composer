@@ -33,6 +33,9 @@ type InlinePackages map[string]json.RawMessage
 // UnmarshalJSON accepts either a JSON object (the real catalog) or an empty
 // JSON array (legacy / V1 stub). A non-empty array is rejected.
 func (p *InlinePackages) UnmarshalJSON(data []byte) error {
+	if p == nil {
+		return fmt.Errorf("packages: UnmarshalJSON on nil InlinePackages pointer")
+	}
 	data = bytes.TrimSpace(data)
 	if len(data) == 0 || bytes.Equal(data, []byte("null")) {
 		*p = nil
@@ -110,6 +113,9 @@ type Metadata struct {
 // available-packages / available-package-patterns list. When the repository
 // advertises no such list, it is treated as lazy and every name is allowed.
 func (r *RootFile) knowsPackage(name string) bool {
+	if r == nil {
+		return true
+	}
 	if len(r.AvailablePackages) == 0 && len(r.AvailablePackagePatterns) == 0 {
 		return true
 	}
