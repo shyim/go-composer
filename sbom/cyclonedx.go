@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"sort"
 	"strings"
 	"sync"
@@ -163,7 +164,8 @@ func Generate(lock *composer.Lock, opts Options) (*BOM, error) {
 		}
 	}
 
-	packages := lock.Packages
+	packages := make([]composer.LockPackage, 0, len(lock.Packages)+len(lock.PackagesDev))
+	packages = append(packages, lock.Packages...)
 	if opts.IncludeDevDependencies {
 		packages = append(packages, lock.PackagesDev...)
 	}
@@ -271,7 +273,9 @@ func isPlatformPackage(name string) bool {
 }
 
 func buildPURL(pkg composer.LockPackage) string {
-	return "pkg:composer/" + pkg.Name + "@" + pkg.Version
+	name := strings.ToLower(pkg.Name)
+	version := url.PathEscape(pkg.Version)
+	return "pkg:composer/" + name + "@" + version
 }
 
 func splitComposerName(name string) (group, pkgName string) {
@@ -302,7 +306,7 @@ func licensesFromPackage(licenses []string) []LicenseChoice {
 }
 
 var (
-	spdxOnce     sync.Once
+	spdxMu       sync.Mutex
 	spdxLicenses *spdx.SpdxLicenses
 )
 
@@ -310,12 +314,14 @@ var (
 // according to github.com/shyim/go-spdx. On database load failure it returns
 // false so free-text license.name is used (still valid CycloneDX).
 func isSPDXLicenseID(license string) bool {
-	spdxOnce.Do(func() {
-		s, err := spdx.NewSpdxLicenses()
-		if err == nil {
+	spdxMu.Lock()
+	if spdxLicenses == nil {
+		if s, err := spdx.NewSpdxLicenses(); err == nil {
 			spdxLicenses = s
 		}
-	})
+	}
+	spdxMu.Unlock()
+
 	if spdxLicenses == nil {
 		return false
 	}

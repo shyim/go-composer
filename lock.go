@@ -38,9 +38,12 @@ type Lock struct {
 }
 
 func (c *Lock) GetPackage(name string) *LockPackage {
-	for _, pkg := range c.Packages {
-		if pkg.Name == name {
-			return &pkg
+	if c == nil {
+		return nil
+	}
+	for i := range c.Packages {
+		if c.Packages[i].Name == name {
+			return &c.Packages[i]
 		}
 	}
 

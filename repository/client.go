@@ -51,11 +51,13 @@ func New(repoURL string, auth *composer.Auth) *Client {
 // URL returns the repository's canonical base URL.
 func (c *Client) URL() string { return c.url }
 
+var defaultHTTPClient = &http.Client{Timeout: 30 * time.Second}
+
 func (c *Client) client() *http.Client {
 	if c.HTTPClient != nil {
 		return c.HTTPClient
 	}
-	return &http.Client{Timeout: 30 * time.Second}
+	return defaultHTTPClient
 }
 
 // packagesJSONURL returns the URL of the repository root file, appending
@@ -86,11 +88,12 @@ func (c *Client) canonicalizeURL(raw string) string {
 // loadRoot fetches and caches the repository root (packages.json).
 func (c *Client) loadRoot(ctx context.Context) (*RootFile, error) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	if c.root != nil {
-		return c.root, nil
+		root := c.root
+		c.mu.Unlock()
+		return root, nil
 	}
+	c.mu.Unlock()
 
 	body, status, err := c.get(ctx, c.packagesJSONURL())
 	if err != nil {
@@ -112,13 +115,18 @@ func (c *Client) loadRoot(ctx context.Context) (*RootFile, error) {
 		r.SecurityAdvisories.APIURL = c.canonicalizeURL(r.SecurityAdvisories.APIURL)
 	}
 
-	c.root = &r
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.root == nil {
+		c.root = &r
+	}
 	return c.root, nil
 }
 
 // matchPackagePattern matches a name against a pattern using "*" as a wildcard
 // for any substring (e.g. "vendor/*"), as used by available-package-patterns.
 func matchPackagePattern(pattern, name string) bool {
+	name = strings.ToLower(name)
 	parts := strings.Split(strings.ToLower(pattern), "*")
 	pos := 0
 	for i, part := range parts {

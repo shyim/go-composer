@@ -35,7 +35,7 @@ func (t *GitlabToken) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 
-	return fmt.Errorf("cannot unmarshal gitlab-token from %q", string(data))
+	return fmt.Errorf("cannot unmarshal gitlab-token: invalid JSON structure")
 }
 
 func (t GitlabToken) MarshalJSON() ([]byte, error) {
@@ -141,11 +141,13 @@ var knownComposerAuthKeys = map[string]struct{}{
 // UnmarshalJSON decodes the known auth.json fields and captures every remaining
 // top-level key in Extra so it can be re-emitted unchanged on marshal.
 func (a *Auth) UnmarshalJSON(data []byte) error {
+	savedPath := a.path
 	var alias composerAuthAlias
 	if err := json.Unmarshal(data, &alias); err != nil {
 		return err
 	}
 	*a = Auth(alias)
+	a.path = savedPath
 
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -197,6 +199,10 @@ func (a Auth) MarshalJSON() ([]byte, error) {
 
 // Save writes the auth configuration back to the file it was read from.
 func (a *Auth) Save() error {
+	if a.path == "" {
+		return fmt.Errorf("cannot save Auth: file path is not set")
+	}
+
 	content, err := a.Json(true)
 	if err != nil {
 		return err

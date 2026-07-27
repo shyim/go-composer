@@ -252,12 +252,15 @@ func lookupAdvisories(adv map[string][]SecurityAdvisory, name string) []Security
 }
 
 // normalizeAdvisoryPackageNames sets PackageName on entries that omit it.
-func normalizeAdvisoryPackageNames(list []SecurityAdvisory, name string) {
-	for i := range list {
-		if list[i].PackageName == "" {
-			list[i].PackageName = name
+func normalizeAdvisoryPackageNames(list []SecurityAdvisory, name string) []SecurityAdvisory {
+	out := make([]SecurityAdvisory, len(list))
+	copy(out, list)
+	for i := range out {
+		if out[i].PackageName == "" {
+			out[i].PackageName = name
 		}
 	}
+	return out
 }
 
 func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
@@ -283,6 +286,7 @@ func (h *Handler) handleAdvisories(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "invalid form", http.StatusBadRequest)
 		return
@@ -298,8 +302,7 @@ func (h *Handler) handleAdvisories(w http.ResponseWriter, r *http.Request) {
 		advisories = map[string][]SecurityAdvisory{}
 	}
 	for name, list := range advisories {
-		normalizeAdvisoryPackageNames(list, name)
-		advisories[name] = list
+		advisories[name] = normalizeAdvisoryPackageNames(list, name)
 	}
 
 	writeJSON(w, struct {
@@ -322,7 +325,7 @@ func parseMetadataPath(path string) (name string, dev bool, ok bool) {
 		rest, dev = trimmed, true
 	}
 	// A valid Composer package name is exactly "vendor/package".
-	if strings.Count(rest, "/") != 1 || strings.HasPrefix(rest, "/") || strings.HasSuffix(rest, "/") {
+	if strings.Count(rest, "/") != 1 || strings.HasPrefix(rest, "/") || strings.HasSuffix(rest, "/") || strings.Contains(rest, "..") {
 		return "", false, false
 	}
 	return rest, dev, true
@@ -339,5 +342,5 @@ func writeJSON(w http.ResponseWriter, v any) {
 }
 
 func httpError(w http.ResponseWriter, err error) {
-	http.Error(w, err.Error(), http.StatusInternalServerError)
+	http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 }

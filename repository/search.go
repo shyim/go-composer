@@ -57,5 +57,6 @@ func (c *Client) Search(ctx context.Context, query string) ([]SearchResult, erro
 		}
 		out = append(out, res)
 	}
+	clear(resp.Results[len(out):])
 	return out, nil
 }

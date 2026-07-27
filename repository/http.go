@@ -38,7 +38,8 @@ func (c *Client) do(req *http.Request) ([]byte, int, error) {
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	const maxBodySize = 50 * 1024 * 1024 // 50MB limit
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodySize))
 	if err != nil {
 		return nil, resp.StatusCode, err
 	}
@@ -52,29 +53,46 @@ func (c *Client) applyAuth(req *http.Request) {
 		return
 	}
 	host := req.URL.Host
+	hostname := req.URL.Hostname()
 
-	if basic, ok := c.auth.HTTPBasicAuth[host]; ok {
+	getMapKey := func(check func(key string) bool) string {
+		if host != "" && check(host) {
+			return host
+		}
+		if hostname != "" && hostname != host && check(hostname) {
+			return hostname
+		}
+		return ""
+	}
+
+	if k := getMapKey(func(k string) bool { _, ok := c.auth.HTTPBasicAuth[k]; return ok }); k != "" {
+		basic := c.auth.HTTPBasicAuth[k]
 		token := base64.StdEncoding.EncodeToString([]byte(basic.Username + ":" + basic.Password))
 		req.Header.Set("Authorization", "Basic "+token)
 		return
 	}
-	if token, ok := c.auth.BearerAuth[host]; ok {
+	if k := getMapKey(func(k string) bool { _, ok := c.auth.BearerAuth[k]; return ok }); k != "" {
+		token := c.auth.BearerAuth[k]
 		req.Header.Set("Authorization", "Bearer "+token)
 		return
 	}
-	if token, ok := c.auth.GithubOAuth[host]; ok {
+	if k := getMapKey(func(k string) bool { _, ok := c.auth.GithubOAuth[k]; return ok }); k != "" {
+		token := c.auth.GithubOAuth[k]
 		req.Header.Set("Authorization", "token "+token)
 		return
 	}
-	if tok, ok := c.auth.GitlabOAuth[host]; ok {
+	if k := getMapKey(func(k string) bool { _, ok := c.auth.GitlabOAuth[k]; return ok }); k != "" {
+		tok := c.auth.GitlabOAuth[k]
 		req.Header.Set("Authorization", "Bearer "+tok.Token)
 		return
 	}
-	if tok, ok := c.auth.GitlabAuth[host]; ok {
+	if k := getMapKey(func(k string) bool { _, ok := c.auth.GitlabAuth[k]; return ok }); k != "" {
+		tok := c.auth.GitlabAuth[k]
 		req.Header.Set("PRIVATE-TOKEN", tok.Token)
 		return
 	}
-	if headers, ok := c.auth.CustomHeaders[host]; ok {
+	if k := getMapKey(func(k string) bool { _, ok := c.auth.CustomHeaders[k]; return ok }); k != "" {
+		headers := c.auth.CustomHeaders[k]
 		for _, h := range headers {
 			if name, value, found := strings.Cut(h, ":"); found {
 				req.Header.Add(strings.TrimSpace(name), strings.TrimSpace(value))

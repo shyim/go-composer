@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/shyim/go-composer"
@@ -146,6 +147,9 @@ func (c *Client) GetPackage(ctx context.Context, name string) (*Package, error) 
 // fileName, and returns the expanded version list for packageName. A 404 is
 // reported as found=false with no error (e.g. a missing ~dev file).
 func (c *Client) fetchPackageFile(ctx context.Context, metadataURL, fileName, packageName string) ([]Version, bool, error) {
+	if strings.Contains(fileName, "..") {
+		return nil, false, fmt.Errorf("invalid package file name %q", fileName)
+	}
 	reqURL := strings.ReplaceAll(metadataURL, "%package%", fileName)
 
 	body, status, err := c.get(ctx, reqURL)
@@ -188,9 +192,14 @@ func lookupInlinePackage(packages InlinePackages, name string) (json.RawMessage,
 	if raw, ok := packages[lower]; ok {
 		return raw, true
 	}
-	for k, raw := range packages {
+	keys := make([]string, 0, len(packages))
+	for k := range packages {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
 		if strings.EqualFold(k, name) {
-			return raw, true
+			return packages[k], true
 		}
 	}
 	return nil, false

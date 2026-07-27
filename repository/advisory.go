@@ -239,8 +239,11 @@ func (c *Client) GetSecurityAdvisories(ctx context.Context, packages []string) (
 			if err != nil {
 				return nil, err
 			}
-			if status != http.StatusOK {
+			if status == http.StatusNotFound {
 				continue
+			}
+			if status != http.StatusOK {
+				return nil, fmt.Errorf("fetching %s: unexpected status %d", reqURL, status)
 			}
 			// Per-package p2 files use a list; tolerate a missing key.
 			var file struct {
