@@ -33,7 +33,7 @@ func sampleLock() *composer.Lock {
 				Dist: composer.LockPackageDist{
 					Type:   "zip",
 					URL:    "https://api.github.com/repos/symfony/console/zipball/abc",
-					Shasum: "abcdef0123456789",
+					Shasum: "0123456789abcdef0123456789abcdef01234567",
 				},
 				Source: composer.LockPackageSource{
 					Type: "git",
@@ -120,7 +120,7 @@ func TestGenerate(t *testing.T) {
 			t.Fatalf("expected 1 hash, got %d", len(consoleComponent.Hashes))
 		}
 		equal(t, "SHA-1", consoleComponent.Hashes[0].Alg)
-		equal(t, "abcdef0123456789", consoleComponent.Hashes[0].Content)
+		equal(t, "0123456789abcdef0123456789abcdef01234567", consoleComponent.Hashes[0].Content)
 
 		referenceTypes := make([]string, 0, len(consoleComponent.ExternalReferences))
 		for _, ref := range consoleComponent.ExternalReferences {
@@ -244,7 +244,8 @@ func TestMarshalProducesValidCycloneDXJSON(t *testing.T) {
 
 func TestIsPlatformPackage(t *testing.T) {
 	platform := []string{"php", "hhvm", "ext-mbstring", "lib-curl", "composer-runtime-api", "composer-plugin-api", "php-64bit"}
-	notPlatform := []string{"symfony/console", "shopware/core", "composer/semver", "composer/installers"}
+	platform = append(platform, "composer")
+	notPlatform := []string{"symfony/console", "shopware/core", "composer/semver", "composer/installers", "php-http/discovery", "php-http/client-common", "ext-foo/bar", "lib-foo/bar"}
 
 	for _, name := range platform {
 		if !isPlatformPackage(name) {
@@ -324,4 +325,54 @@ func TestNewSerialNumberIsUUIDv4Like(t *testing.T) {
 	if parts[2][0] != '4' {
 		t.Fatalf("version nibble should be 4, got %q", parts[2])
 	}
+}
+
+func TestLicensesFromPackageUsesCanonicalIDsOnly(t *testing.T) {
+	licenses := licensesFromPackage([]string{"mit", "apache-2.0", "MIT OR Apache-2.0", "NOASSERTION"})
+	want := []LicenseChoice{
+		{License: License{ID: "MIT"}},
+		{License: License{ID: "Apache-2.0"}},
+		{License: License{Name: "MIT OR Apache-2.0"}},
+		{License: License{Name: "NOASSERTION"}},
+	}
+	if len(licenses) != len(want) {
+		t.Fatalf("expected %d licenses, got %d", len(want), len(licenses))
+	}
+	for i := range want {
+		if licenses[i] != want[i] {
+			t.Fatalf("license %d: expected %+v, got %+v", i, want[i], licenses[i])
+		}
+	}
+}
+
+func TestComponentFromPackageSkipsInvalidShasum(t *testing.T) {
+	for _, shasum := range []string{"", "abc123", "zz23456789abcdef0123456789abcdef01234567"} {
+		pkg := composer.LockPackage{Name: "acme/lib", Version: "1.0.0"}
+		pkg.Dist.Shasum = shasum
+		if hashes := componentFromPackage(pkg).Hashes; len(hashes) != 0 {
+			t.Fatalf("shasum %q: expected no hash, got %+v", shasum, hashes)
+		}
+	}
+}
+
+func TestGenerateKeepsEdgesToVendorPrefixedPackages(t *testing.T) {
+	lock := &composer.Lock{Packages: []composer.LockPackage{
+		{Name: "acme/client", Version: "1.0.0", Require: map[string]string{"php": ">=8.1", "php-http/discovery": "^1.19"}},
+		{Name: "php-http/discovery", Version: "1.20.0"},
+	}}
+
+	bom, err := Generate(lock, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, dep := range bom.Dependencies {
+		if dep.Ref == "pkg:composer/acme/client@1.0.0" {
+			if len(dep.DependsOn) != 1 || dep.DependsOn[0] != "pkg:composer/php-http/discovery@1.20.0" {
+				t.Fatalf("expected edge to php-http/discovery, got %v", dep.DependsOn)
+			}
+			return
+		}
+	}
+	t.Fatal("no dependency entry for acme/client")
 }

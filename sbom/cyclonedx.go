@@ -204,8 +204,9 @@ func componentFromPackage(pkg composer.LockPackage) Component {
 		Licenses:    licensesFromPackage(pkg.License),
 	}
 
-	if pkg.Dist.Shasum != "" {
-		// Composer lock dist.shasum is a SHA-1 hex digest.
+	if isSHA1Hex(pkg.Dist.Shasum) {
+		// Composer lock dist.shasum is a SHA-1 hex digest. Other values would
+		// violate the CycloneDX hash content pattern, so they are skipped.
 		component.Hashes = append(component.Hashes, Hash{Alg: "SHA-1", Content: pkg.Dist.Shasum})
 	}
 
@@ -261,7 +262,12 @@ func buildDependencies(packages []composer.LockPackage, refByName map[string]str
 // platform requirement (php, ext-*, lib-*, composer-plugin-api, …) that should
 // not appear as an SBOM dependency edge.
 func isPlatformPackage(name string) bool {
-	if name == "php" || name == "hhvm" {
+	// Platform packages have no vendor; php-http/discovery or
+	// lib-foo/bar are regular packages.
+	if strings.Contains(name, "/") {
+		return false
+	}
+	if name == "php" || name == "hhvm" || name == "composer" {
 		return true
 	}
 	for _, prefix := range []string{"php-", "ext-", "lib-", "composer-"} {
@@ -296,8 +302,8 @@ func licensesFromPackage(licenses []string) []LicenseChoice {
 		if license == "" {
 			continue
 		}
-		if isSPDXLicenseID(license) {
-			out = append(out, LicenseChoice{License: License{ID: license}})
+		if id, ok := spdxLicenseID(license); ok {
+			out = append(out, LicenseChoice{License: License{ID: id}})
 		} else {
 			out = append(out, LicenseChoice{License: License{Name: license}})
 		}
@@ -310,10 +316,13 @@ var (
 	spdxLicenses *spdx.SpdxLicenses
 )
 
-// isSPDXLicenseID reports whether license is a valid SPDX identifier/expression
-// according to github.com/shyim/go-spdx. On database load failure it returns
-// false so free-text license.name is used (still valid CycloneDX).
-func isSPDXLicenseID(license string) bool {
+// spdxLicenseID returns the canonical SPDX identifier (mit becomes MIT) when
+// license is a single entry of the SPDX license list. CycloneDX license.id is
+// an enumeration of those identifiers, so expressions such as
+// "MIT OR Apache-2.0" are not accepted and end up in license.name. On database
+// load failure it returns false so free-text license.name is used (still valid
+// CycloneDX).
+func spdxLicenseID(license string) (string, bool) {
 	spdxMu.Lock()
 	if spdxLicenses == nil {
 		if s, err := spdx.NewSpdxLicenses(); err == nil {
@@ -323,10 +332,26 @@ func isSPDXLicenseID(license string) bool {
 	spdxMu.Unlock()
 
 	if spdxLicenses == nil {
+		return "", false
+	}
+	entry, ok := spdxLicenses.GetLicenseByIdentifier(license)
+	if !ok {
+		return "", false
+	}
+	return entry.Identifier, true
+}
+
+// isSHA1Hex reports whether value is a 40 character hexadecimal digest.
+func isSHA1Hex(value string) bool {
+	if len(value) != 40 {
 		return false
 	}
-	ok, _ := spdxLicenses.Validate(license)
-	return ok
+	for _, r := range value {
+		if !strings.ContainsRune("0123456789abcdefABCDEF", r) {
+			return false
+		}
+	}
+	return true
 }
 
 // cyclonedxType maps a composer package type to a CycloneDX component type.
